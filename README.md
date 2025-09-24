@@ -5,11 +5,11 @@
 [![kube-green](https://img.shields.io/badge/kube--green-Resource%20Optimization-green)](https://kube-green.dev/)
 [![Slack Integration](https://img.shields.io/badge/Slack-Integration-purple)](https://slack.com)
 
-## 🎯 Project Overview
+## Project Overview
 
 This POC implements an automated Kubernetes resource optimization system that reduces staging environment costs by 60-80% during off-hours while maintaining seamless developer experience through GitOps workflows and Slack integration.
 
-## 🏗️ Architecture
+## Architecture
 
 ```mermaid
 graph TB
@@ -31,7 +31,7 @@ graph TB
     style H fill:#E6522C
 ```
 
-## 🚀 Quick Start
+## Quick Start
 
 ### Prerequisites
 - Kubernetes cluster (1.20+)
@@ -78,7 +78,7 @@ k8s-resource-optimization/
 └── tests/                   # Test suites
 ```
 
-## 🔄 Business Flow
+## Business Flow
 
 1. **Scheduled Automation**: kube-green triggers based on CronJob schedules
 2. **Resource Sleep/Wake**: Workloads scaled down/up automatically
@@ -87,14 +87,14 @@ k8s-resource-optimization/
 5. **GitOps Integration**: All changes tracked in Git
 6. **Audit Trail**: Complete history of all actions
 
-## 📊 Cost Optimization
+## Cost Optimization
 
 - **Weekday Off-hours**: 6 PM - 8 AM (14 hours = 58% daily savings)
 - **Weekends**: Complete shutdown (48 hours = 100% weekend savings)
 - **Holidays**: Custom schedules
 - **Overall Projection**: 60-80% cost reduction
 
-## 🛠️ Components
+## Components
 
 ### kube-green Operator
 - Kubernetes-native resource management
@@ -120,7 +120,7 @@ k8s-resource-optimization/
 - Automated sync policies
 - Configuration drift detection
 
-## 📚 Documentation
+## Documentation
 
 - [Architecture Documentation](./docs/architecture/)
 - [Deployment Guide](./docs/runbooks/deployment.md)
@@ -128,7 +128,7 @@ k8s-resource-optimization/
 - [API Documentation](./docs/api/)
 - [Slack Bot Usage](./docs/slack-integration.md)
 
-## 🧪 Testing
+## Testing
 
 ```bash
 # Run integration tests
@@ -138,7 +138,7 @@ k8s-resource-optimization/
 ./scripts/test-e2e.sh
 ```
 
-## 🔧 Configuration
+## Configuration
 
 ### Environment Variables
 ```bash
@@ -169,7 +169,7 @@ weekendSchedule: "0 18 * * 5"       # Sleep Friday 6 PM
 weekendWakeup: "0 8 * * 1"          # Wake Monday 8 AM
 ```
 
-## 🚨 Monitoring & Alerts
+## Monitoring & Alerts
 
 ### Key Metrics
 - Resource utilization before/after optimization
@@ -184,7 +184,7 @@ weekendWakeup: "0 8 * * 1"          # Wake Monday 8 AM
 - Unexpected resource scaling events
 - High manual override frequency
 
-## 🔐 Security
+## Security
 
 - RBAC configurations for all components
 - Secret management via external operators
@@ -192,14 +192,14 @@ weekendWakeup: "0 8 * * 1"          # Wake Monday 8 AM
 - Audit logging for compliance
 - Encrypted communications
 
-## 📈 Performance
+## Performance
 
 - Sub-minute response time for manual overrides
 - 99.9% scheduling accuracy
 - Minimal resource overhead (< 2% cluster resources)
 - Graceful degradation during failures
 
-## 🤝 Contributing
+## Contributing
 
 1. Fork the repository
 2. Create a feature branch
@@ -208,18 +208,18 @@ weekendWakeup: "0 8 * * 1"          # Wake Monday 8 AM
 5. Update documentation
 6. Submit a pull request
 
-## 📞 Support
+## Support
 
 - **Slack Channel**: #k8s-optimization
 - **GitLab Issues**: [Create an issue](./issues)
 - **Documentation**: [Wiki](./docs/)
 - **Runbooks**: [Troubleshooting Guide](./docs/troubleshooting/)
 
-## 📄 License
+## License
 
 This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
 
-## 🙏 Acknowledgments
+## Acknowledgments
 
 - [kube-green](https://kube-green.dev/) for the core optimization engine
 - [ArgoCD](https://argoproj.github.io/cd/) for GitOps workflows
