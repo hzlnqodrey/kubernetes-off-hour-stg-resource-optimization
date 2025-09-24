@@ -1,0 +1,72 @@
+apiVersion: v2
+name: kube-green-config
+description: Helm chart for kube-green configuration and SleepInfo resources
+type: application
+version: 1.0.0
+appVersion: "v0.5.1"
+
+keywords:
+  - kubernetes
+  - cost-optimization
+  - resource-management
+  - kube-green
+  - sustainability
+
+home: https://kube-green.dev/
+sources:
+  - https://github.com/kube-green/kube-green
+  - https://gitlab.com/your-org/k8s-resource-optimization
+
+maintainers:
+  - name: DevOps Team
+    email: devops@company.com
+    url: https://company.com/devops
+  - name: Platform Engineering
+    email: platform@company.com
+    url: https://company.com/platform
+
+icon: https://kube-green.dev/img/logo.svg
+
+annotations:
+  category: Infrastructure
+  licenses: MIT
+
+  # Artifact Hub annotations
+  artifacthub.io/changes: |
+    - Added SleepInfo CRDs for multi-environment support
+    - Implemented tiered sleep scheduling
+    - Added Slack integration hooks
+    - Enhanced security with RBAC
+  artifacthub.io/containsSecurityUpdates: "false"
+  artifacthub.io/images: |
+    - name: kube-green
+      image: kubegreen/kube-green:v0.5.1
+  artifacthub.io/license: MIT
+  artifacthub.io/links: |
+    - name: Documentation
+      url: https://kube-green.dev/docs/
+    - name: Chart Source
+      url: https://gitlab.com/your-org/k8s-resource-optimization
+  artifacthub.io/maintainers: |
+    - name: DevOps Team
+      email: devops@company.com
+  artifacthub.io/operator: "false"
+  artifacthub.io/operatorCapabilities: Basic Install
+  artifacthub.io/prerelease: "false"
+  artifacthub.io/recommendations: |
+    - url: https://artifacthub.io/packages/helm/prometheus-community/prometheus
+    - url: https://artifacthub.io/packages/helm/grafana/grafana
+  artifacthub.io/screenshots: |
+    - title: Cost Optimization Dashboard
+      url: https://example.com/screenshots/dashboard.png
+    - title: Slack Integration
+      url: https://example.com/screenshots/slack.png
+
+dependencies:
+  - name: common
+    repository: https://charts.bitnami.com/bitnami
+    version: 2.x.x
+    condition: common.enabled
+
+engine: gotpl
+kubeVersion: ">= 1.20.0"
