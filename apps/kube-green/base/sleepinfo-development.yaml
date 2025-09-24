@@ -1,0 +1,166 @@
+apiVersion: kube-green.com/v1alpha1
+kind: SleepInfo
+metadata:
+  name: development-sleep-schedule
+  namespace: development
+  labels:
+    app.kubernetes.io/name: kube-green
+    app.kubernetes.io/component: sleepinfo
+    app.kubernetes.io/part-of: k8s-resource-optimization
+    environment: development
+  annotations:
+    argocd.argoproj.io/sync-wave: "2"
+    kube-green.dev/description: "Automated resource optimization for development environment"
+    kube-green.dev/slack-notifications: "enabled"
+    kube-green.dev/manual-override: "enabled"
+spec:
+  # More aggressive schedule for development: Sleep at 5 PM, Wake up at 9 AM (16 hours of sleep = 67% daily savings)
+  weekdaysSleepAt: "17:00"
+  weekdaysWakeUpAt: "09:00"
+
+  # Weekend schedule: Complete shutdown Friday 5 PM to Monday 9 AM (64 hours of sleep = 100% weekend savings)
+  weekendsSleepAt: "17:00"
+  weekendsWakeUpAt: "09:00"
+
+  # Timezone configuration
+  timeZone: "UTC"
+
+  # Suspend cron jobs during sleep to prevent unnecessary resource consumption
+  suspendCronJobs: true
+
+  # Minimal exclusions for development environment
+  excludeRef:
+    - apiVersion: "apps/v1"
+      kind: "Deployment"
+      name: "monitoring-agent"
+    - apiVersion: "apps/v1"
+      kind: "Deployment"
+      matchLabels:
+        kube-green.dev/exclude: "true"
+    - apiVersion: "v1"
+      kind: "Service"
+      matchLabels:
+        service-type: "loadbalancer"
+    - apiVersion: "batch/v1"
+      kind: "CronJob"
+      matchLabels:
+        kube-green.dev/critical: "true"
+
+  # Development-specific patches for aggressive resource reduction
+  patches:
+    - type: "strategic"
+      target:
+        kind: "Deployment"
+        group: "apps"
+        version: "v1"
+      patch: |
+        spec:
+          replicas: 0
+    - type: "merge"
+      target:
+        kind: "HorizontalPodAutoscaler"
+        group: "autoscaling"
+        version: "v2"
+      patch: |
+        spec:
+          minReplicas: 0
+          maxReplicas: 0
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: development-sleep-config
+  namespace: development
+  labels:
+    app.kubernetes.io/name: kube-green
+    app.kubernetes.io/component: config
+    environment: development
+  annotations:
+    argocd.argoproj.io/sync-wave: "1"
+data:
+  environment: "development"
+  sleep-schedule: "development-sleep-schedule"
+  slack-channel: "#k8s-optimization-dev"
+  webhook-url: "https://hooks.slack.com/services/YOUR/DEV/WEBHOOK"
+  cost-tracking: "enabled"
+
+  # Aggressive resource scaling policies for development
+  deployment-scaling-policy: |
+    {
+      "default": {
+        "sleep": {"replicas": 0},
+        "wake": {"replicas": 1}
+      },
+      "exceptions": {
+        "monitoring-*": {"sleep": {"replicas": 1}},
+        "*-cache": {"sleep": {"replicas": 0}, "wake": {"replicas": 1}},
+        "*-worker": {"sleep": {"replicas": 0}, "wake": {"replicas": 2}}
+      }
+    }
+
+  # Extended holiday schedule for development environment
+  holiday-schedule: |
+    # Christmas shutdown: Dec 20 - Jan 3 (extended for dev)
+    christmas_start: "2024-12-20T17:00:00Z"
+    christmas_end: "2025-01-03T09:00:00Z"
+
+    # Spring break: March 10-25 (extended for dev)
+    spring_break_start: "2025-03-10T17:00:00Z"
+    spring_break_end: "2025-03-25T09:00:00Z"
+
+    # Summer break: July 1-15
+    summer_break_start: "2025-07-01T17:00:00Z"
+    summer_break_end: "2025-07-15T09:00:00Z"
+
+  # Emergency contacts for development environment
+  emergency-contacts: |
+    - name: "Development Team Lead"
+      slack: "@dev-team-lead"
+      email: "dev-lead@company.com"
+    - name: "Platform Engineering"
+      slack: "@platform-eng"
+      email: "platform@company.com"
+
+  # Development-specific manual override instructions
+  manual-override-instructions: |
+    Development Environment Manual Override:
+
+    Quick Wake Up (for urgent development work):
+    1. Slack command: /k8s-wake dev --priority high
+    2. Click "Emergency Wake Dev" button in #k8s-optimization-dev
+    3. Auto-wakes critical services first, then all services
+
+    Quick Sleep (for immediate resource savings):
+    1. Slack command: /k8s-sleep dev --force
+    2. Click "Force Sleep Dev" button in #k8s-optimization-dev
+    3. Immediately scales down all non-critical services
+
+    Scheduled Overrides:
+    1. Use /k8s-schedule dev wake "2024-12-01 08:00"
+    2. Use /k8s-schedule dev sleep "2024-12-01 20:00"
+
+    Note: Development environment has more aggressive scaling policies
+    and faster wake-up times optimized for developer productivity.
+
+  # Development environment specific settings
+  development-settings: |
+    fast_wake_enabled: true
+    fast_wake_timeout: "2m"
+    aggressive_scaling: true
+    auto_cleanup_enabled: true
+    cleanup_schedule: "0 2 * * *"  # Daily cleanup at 2 AM
+
+    # Quick development workflows
+    quick_actions:
+      - name: "wake_for_demo"
+        description: "Wake environment for demo/presentation"
+        duration: "4h"
+        auto_sleep: true
+      - name: "wake_for_development"
+        description: "Wake environment for active development"
+        duration: "8h"
+        auto_sleep: true
+      - name: "wake_for_testing" 
+        description: "Wake environment for testing"
+        duration: "2h"
+        auto_sleep: true

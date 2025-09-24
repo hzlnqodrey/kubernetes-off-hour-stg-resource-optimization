@@ -1,0 +1,39 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: kube-green-system
+  labels:
+    app.kubernetes.io/name: kube-green
+    app.kubernetes.io/component: system
+    app.kubernetes.io/part-of: k8s-resource-optimization
+    control-plane: controller-manager
+    pod-security.kubernetes.io/enforce: restricted
+    pod-security.kubernetes.io/audit: restricted
+    pod-security.kubernetes.io/warn: restricted
+  annotations:
+    argocd.argoproj.io/sync-wave: "0"
+    argocd.argoproj.io/hook: PreSync
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: staging
+  labels:
+    kube-green.dev/sleep-schedule: "enabled"
+    environment: staging
+    app.kubernetes.io/managed-by: kube-green
+  annotations:
+    argocd.argoproj.io/sync-wave: "0"
+    kube-green.dev/sleep-info: "staging-sleep-schedule"
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: development
+  labels:
+    kube-green.dev/sleep-schedule: "enabled"
+    environment: development
+    app.kubernetes.io/managed-by: kube-green
+  annotations:
+    argocd.argoproj.io/sync-wave: "0"
+    kube-green.dev/sleep-info: "development-sleep-schedule"

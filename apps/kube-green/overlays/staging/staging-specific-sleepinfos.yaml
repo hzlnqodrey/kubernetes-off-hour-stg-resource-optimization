@@ -1,0 +1,207 @@
+apiVersion: kube-green.com/v1alpha1
+kind: SleepInfo
+metadata:
+  name: staging-web-services
+  namespace: staging
+  labels:
+    app.kubernetes.io/name: kube-green
+    app.kubernetes.io/component: sleepinfo
+    environment: staging
+    service-tier: web
+  annotations:
+    argocd.argoproj.io/sync-wave: "3"
+    kube-green.dev/description: "Web services optimization for staging"
+spec:
+  weekdaysSleepAt: "19:00" # Later sleep time for web services
+  weekdaysWakeUpAt: "07:00" # Earlier wake time for web services
+  weekendsSleepAt: "19:00"
+  weekendsWakeUpAt: "07:00"
+  timeZone: "UTC"
+  suspendCronJobs: false # Keep web-related cron jobs running
+
+  excludeRef:
+    - apiVersion: "apps/v1"
+      kind: "Deployment"
+      matchLabels:
+        app.kubernetes.io/component: "frontend"
+    - apiVersion: "apps/v1"
+      kind: "Deployment"
+      matchLabels:
+        app.kubernetes.io/component: "api-gateway"
+
+  patches:
+    - type: "strategic"
+      target:
+        kind: "Deployment"
+        group: "apps"
+        version: "v1"
+      patch: |
+        spec:
+          replicas: 1  # Keep minimal replicas for web services
+---
+apiVersion: kube-green.com/v1alpha1
+kind: SleepInfo
+metadata:
+  name: staging-background-services
+  namespace: staging
+  labels:
+    app.kubernetes.io/name: kube-green
+    app.kubernetes.io/component: sleepinfo
+    environment: staging
+    service-tier: background
+  annotations:
+    argocd.argoproj.io/sync-wave: "3"
+    kube-green.dev/description: "Background services optimization for staging"
+spec:
+  weekdaysSleepAt: "18:00" # Earlier sleep for background services
+  weekdaysWakeUpAt: "08:00"
+  weekendsSleepAt: "18:00"
+  weekendsWakeUpAt: "08:00"
+  timeZone: "UTC"
+  suspendCronJobs: true # Suspend background cron jobs
+
+  excludeRef:
+    - apiVersion: "apps/v1"
+      kind: "Deployment"
+      matchLabels:
+        app.kubernetes.io/component: "monitoring"
+
+  patches:
+    - type: "strategic"
+      target:
+        kind: "Deployment"
+        group: "apps"
+        version: "v1"
+      patch: |
+        spec:
+          replicas: 0  # Complete shutdown for background services
+---
+apiVersion: kube-green.com/v1alpha1
+kind: SleepInfo
+metadata:
+  name: staging-data-services
+  namespace: staging
+  labels:
+    app.kubernetes.io/name: kube-green
+    app.kubernetes.io/component: sleepinfo
+    environment: staging
+    service-tier: data
+  annotations:
+    argocd.argoproj.io/sync-wave: "3"
+    kube-green.dev/description: "Data services optimization for staging"
+spec:
+  weekdaysSleepAt: "20:00" # Latest sleep time for data services
+  weekdaysWakeUpAt: "06:00" # Earliest wake time for data services
+  weekendsSleepAt: "20:00"
+  weekendsWakeUpAt: "06:00"
+  timeZone: "UTC"
+  suspendCronJobs: false # Keep data-related cron jobs for backups
+
+  excludeRef:
+    - apiVersion: "apps/v1"
+      kind: "StatefulSet"
+      matchLabels:
+        app.kubernetes.io/component: "database"
+    - apiVersion: "apps/v1"
+      kind: "Deployment"
+      matchLabels:
+        app.kubernetes.io/component: "backup-agent"
+    - apiVersion: "batch/v1"
+      kind: "CronJob"
+      matchLabels:
+        job-type: "backup"
+
+  patches:
+    - type: "strategic"
+      target:
+        kind: "Deployment"
+        group: "apps"
+        version: "v1"
+        name: "redis"
+      patch: |
+        spec:
+          replicas: 1  # Keep minimal Redis for data consistency
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: staging-sleep-tiers-config
+  namespace: staging
+  labels:
+    app.kubernetes.io/name: kube-green
+    app.kubernetes.io/component: config
+    environment: staging
+  annotations:
+    argocd.argoproj.io/sync-wave: "2"
+data:
+  sleep-tiers: |
+    # Staging Environment Sleep Tiers Configuration
+    # This defines the order and timing of service shutdowns/startups
+
+    shutdown_order:
+      - tier: "background"
+        priority: 1
+        sleep_time: "18:00"
+        services: ["workers", "schedulers", "batch-processors"]
+        
+      - tier: "web"
+        priority: 2
+        sleep_time: "19:00"
+        services: ["frontend", "api", "web-servers"]
+        
+      - tier: "data"
+        priority: 3
+        sleep_time: "20:00"
+        services: ["cache", "search", "analytics"]
+
+    startup_order:
+      - tier: "data"
+        priority: 1
+        wake_time: "06:00"
+        startup_delay: "2m"
+        health_check_timeout: "5m"
+        
+      - tier: "web"
+        priority: 2
+        wake_time: "07:00"
+        startup_delay: "1m"
+        health_check_timeout: "3m"
+        
+      - tier: "background"
+        priority: 3
+        wake_time: "08:00"
+        startup_delay: "30s"
+        health_check_timeout: "2m"
+
+  service-dependencies: |
+    # Service dependency mapping for proper shutdown/startup sequencing
+    dependencies:
+      web-services:
+        requires: ["data-services"]
+        startup_delay: "30s"
+        
+      background-services:
+        requires: ["web-services", "data-services"]
+        startup_delay: "60s"
+        
+      analytics-services:
+        requires: ["data-services"]
+        startup_delay: "120s"
+
+  emergency-procedures: |
+    # Emergency wake-up procedures for staging
+    emergency_wake:
+      - name: "critical_demo"
+        description: "Wake up for critical demo/presentation"
+        services: ["web", "data"]
+        duration: "4h"
+        
+      - name: "urgent_development"
+        description: "Wake up for urgent development work"
+        services: ["all"]
+        duration: "2h"
+        
+      - name: "testing_session"
+        description: "Wake up for testing session"
+        services: ["web", "background"]
+        duration: "6h"

@@ -1,0 +1,434 @@
+# =============================================================================
+# Kubernetes Resource Optimization POC - GitIgnore Configuration
+# =============================================================================
+# This file prevents confidential and sensitive files from being committed
+# to the repository, ensuring security best practices for production systems.
+# =============================================================================
+
+# =============================================================================
+# CRITICAL SECURITY FILES - NEVER COMMIT THESE
+# =============================================================================
+
+# Environment variables and configuration files containing secrets
+.env
+.env.*
+*.env
+.environment
+config.local.*
+local.env
+secrets.env
+
+# Kubernetes configuration and credentials
+kubeconfig*
+*kubeconfig*
+.kube/
+*.kubeconfig
+k8s-config*
+
+# SSL/TLS Certificates and Keys
+*.pem
+*.key
+*.crt
+*.cert
+*.cer
+*.p12
+*.pfx
+*.jks
+*.keystore
+*.truststore
+tls/
+certs/
+certificates/
+ssl/
+
+# SSH Keys
+*.rsa
+*.dsa
+*.ecdsa
+*.ed25519
+id_rsa*
+id_dsa*
+id_ecdsa*
+id_ed25519*
+.ssh/
+
+# GPG Keys
+*.gpg
+*.asc
+.gnupg/
+
+# Authentication tokens and API keys
+*token*
+*secret*
+*password*
+*credential*
+api-keys/
+tokens/
+auth/
+
+# =============================================================================
+# KUBERNETES & CONTAINER SPECIFIC
+# =============================================================================
+
+# Helm secrets and private values
+values.local.yaml
+values.secret.yaml
+values.private.yaml
+secrets.yaml
+*-secrets.yaml
+*secret*.yaml
+*.secret.yaml
+
+# Kubernetes secret manifests with actual values
+**/secrets/*-data.yaml
+**/secrets/actual-*
+secret-data/
+
+# Docker and container secrets
+.docker/
+docker-compose.override.yml
+docker-compose.local.yml
+.dockerignore.local
+
+# =============================================================================
+# ARGOCD & GITOPS SPECIFIC
+# =============================================================================
+
+# ArgoCD server certificates and auth
+argocd-server.crt
+argocd-server.key
+argocd-ca.crt
+argo-cd-*-tls
+
+# GitLab runner registration tokens
+.gitlab-runner/
+runner-registration-token
+
+# =============================================================================
+# SLACK & EXTERNAL INTEGRATIONS
+# =============================================================================
+
+# Slack tokens and webhooks
+slack-tokens/
+slack-secrets/
+webhook-urls.txt
+slack-config.local.*
+
+# GitLab personal access tokens
+gitlab-tokens/
+gitlab-secrets/
+.gitlab-token
+
+# =============================================================================
+# BACKUP AND TEMPORARY FILES
+# =============================================================================
+
+# Editor backup files
+*~
+*.bak
+*.backup
+*.swp
+*.swo
+*.tmp
+*.temp
+.#*
+#*#
+
+# Archive files
+*.tar
+*.tar.gz
+*.tgz
+*.zip
+*.rar
+*.7z
+
+# Backup directories
+backup/
+backups/
+*.backup/
+bak/
+
+# =============================================================================
+# DEVELOPMENT & IDE FILES
+# =============================================================================
+
+# VS Code
+.vscode/
+*.code-workspace
+.history/
+
+# IntelliJ IDEA
+.idea/
+*.iml
+*.ipr
+*.iws
+out/
+
+# Sublime Text
+*.sublime-project
+*.sublime-workspace
+
+# Vim
+*.swp
+*.swo
+*~
+.netrwhist
+
+# Emacs
+*~
+\#*\#
+/.emacs.desktop
+/.emacs.desktop.lock
+*.elc
+auto-save-list
+tramp
+.\#*
+
+# =============================================================================
+# OPERATING SYSTEM FILES
+# =============================================================================
+
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+Icon
+._*
+.DocumentRevisions-V100
+.fseventsd
+.Spotlight-V100
+.TemporaryItems
+.Trashes
+.VolumeIcon.icns
+.com.apple.timemachine.donotpresent
+
+# Windows
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+$RECYCLE.BIN/
+*.cab
+*.msi
+*.msm
+*.msp
+*.lnk
+
+# Linux
+*~
+.fuse_hidden*
+.directory
+.Trash-*
+.nfs*
+
+# =============================================================================
+# LOGS AND MONITORING
+# =============================================================================
+
+# Application logs
+*.log
+logs/
+log/
+*.log.*
+syslog
+*.out
+*.err
+
+# Monitoring data
+prometheus/data/
+grafana/data/
+alertmanager/data/
+
+# =============================================================================
+# BUILD AND DEPENDENCY FILES
+# =============================================================================
+
+# Node.js
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.npm
+.yarn/
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+env/
+venv/
+ENV/
+env.bak/
+venv.bak/
+pip-log.txt
+pip-delete-this-directory.txt
+.pytest_cache/
+
+# Go
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+*.test
+*.out
+vendor/
+
+# Java
+*.class
+*.jar
+*.war
+*.ear
+*.zip
+*.tar.gz
+*.rar
+target/
+build/
+
+# =============================================================================
+# TERRAFORM (if used)
+# =============================================================================
+
+# Terraform state files
+*.tfstate
+*.tfstate.*
+*.tfvars
+*.auto.tfvars
+.terraform/
+.terraform.lock.hcl
+terraform.rc
+.terraformrc
+
+# =============================================================================
+# HELM SPECIFIC
+# =============================================================================
+
+# Helm dependency charts
+charts/*/charts/
+requirements.lock
+Chart.lock
+
+# Local helm values
+values.local.yaml
+values.dev.yaml
+values.production.yaml
+local-values.yaml
+my-values.yaml
+
+# =============================================================================
+# TESTING AND COVERAGE
+# =============================================================================
+
+# Test results
+test-results/
+test-reports/
+coverage/
+*.cover
+.coverage
+.pytest_cache/
+.tox/
+.cache
+nosetests.xml
+coverage.xml
+*.cobertura.xml
+
+# =============================================================================
+# LOCAL CONFIGURATION OVERRIDES
+# =============================================================================
+
+# Local configuration files
+local/
+local.yaml
+local.yml
+*.local.*
+.local
+config.local
+settings.local.*
+
+# Personal configuration
+personal/
+personal.yaml
+my-config.*
+
+# Development overrides
+dev-overrides/
+development.local.*
+staging.local.*
+production.local.*
+
+# =============================================================================
+# CUSTOM PROJECT EXCLUSIONS
+# =============================================================================
+
+# Cost reports with potentially sensitive data
+cost-reports/
+billing-data/
+usage-reports/
+
+# Monitoring exports
+metrics-export/
+dashboard-exports/
+
+# Demo data with potentially sensitive info
+demo-data/
+sample-data/
+test-data/
+
+# Documentation drafts with sensitive info
+drafts/
+internal-docs/
+confidential/
+
+# Vendor-specific files
+vendor-configs/
+third-party-configs/
+
+# =============================================================================
+# TEMPORARY DIRECTORIES
+# =============================================================================
+
+# Temporary directories
+tmp/
+temp/
+.tmp/
+.temp/
+
+# Cache directories
+.cache/
+cache/
+.yarn/cache/
+.npm/_cacache/
+
+# =============================================================================
+# GITIGNORE PATTERNS VERIFICATION
+# =============================================================================
+
+# To verify this .gitignore is working:
+# 1. Run: git status
+# 2. Create a test secret file: echo "secret" > test.env
+# 3. Run: git status (should not show test.env)
+# 4. Remove test file: rm test.env
+
+# =============================================================================
+# EMERGENCY ACCESS
+# =============================================================================
+
+# If you accidentally commit secrets:
+# 1. Immediately revoke/rotate all exposed credentials
+# 2. Use git filter-branch or BFG Repo-Cleaner to remove from history
+# 3. Force push cleaned history
+# 4. Notify security team if applicable
+
+# =============================================================================
+# MAINTENANCE NOTES
+# =============================================================================
+
+# Review this .gitignore periodically to ensure:
+# 1. All new secret types are covered
+# 2. Development tools are properly excluded
+# 3. No legitimate files are accidentally ignored
+# 4. Patterns remain current with project evolution
+
+# Last updated: September 2025
+# Next review: Every 6 months or when adding new tools/integrations

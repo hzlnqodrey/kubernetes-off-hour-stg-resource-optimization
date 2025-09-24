@@ -1,0 +1,214 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: k8s-resource-optimization-app-of-apps
+  namespace: argocd
+  labels:
+    app.kubernetes.io/name: argocd-application
+    app.kubernetes.io/component: app-of-apps
+    app.kubernetes.io/part-of: k8s-resource-optimization
+  annotations:
+    argocd.argoproj.io/sync-wave: "0"
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: k8s-resource-optimization
+  source:
+    repoURL: https://gitlab.com/your-org/k8s-resource-optimization.git
+    targetRevision: HEAD
+    path: apps/argocd/projects
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: argocd
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+      allowEmpty: false
+    syncOptions:
+      - CreateNamespace=true
+      - PrunePropagationPolicy=foreground
+      - PruneLast=true
+    retry:
+      limit: 5
+      backoff:
+        duration: 5s
+        factor: 2
+        maxDuration: 3m
+  revisionHistoryLimit: 10
+---
+apiVersion: argoproj.io/v1alpha1
+kind: AppProject
+metadata:
+  name: k8s-resource-optimization
+  namespace: argocd
+  labels:
+    app.kubernetes.io/name: argocd-project
+    app.kubernetes.io/component: project
+    app.kubernetes.io/part-of: k8s-resource-optimization
+  annotations:
+    argocd.argoproj.io/sync-wave: "-1"
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  description: Kubernetes Off Hours Resource Optimization Project
+
+  # Source repositories
+  sourceRepos:
+    - "https://gitlab.com/your-org/k8s-resource-optimization.git"
+    - "https://github.com/kube-green/kube-green.git"
+    - "https://charts.bitnami.com/bitnami"
+    - "https://prometheus-community.github.io/helm-charts"
+    - "https://grafana.github.io/helm-charts"
+
+  # Destination clusters and namespaces
+  destinations:
+    - namespace: "kube-green-system"
+      server: https://kubernetes.default.svc
+    - namespace: "staging"
+      server: https://kubernetes.default.svc
+    - namespace: "production"
+      server: https://kubernetes.default.svc
+    - namespace: "development"
+      server: https://kubernetes.default.svc
+    - namespace: "monitoring"
+      server: https://kubernetes.default.svc
+    - namespace: "argocd"
+      server: https://kubernetes.default.svc
+
+  # Cluster resource whitelist
+  clusterResourceWhitelist:
+    - group: ""
+      kind: Namespace
+    - group: ""
+      kind: ClusterRole
+    - group: ""
+      kind: ClusterRoleBinding
+    - group: "rbac.authorization.k8s.io"
+      kind: ClusterRole
+    - group: "rbac.authorization.k8s.io"
+      kind: ClusterRoleBinding
+    - group: "apiextensions.k8s.io"
+      kind: CustomResourceDefinition
+    - group: "admissionregistration.k8s.io"
+      kind: MutatingWebhookConfiguration
+    - group: "admissionregistration.k8s.io"
+      kind: ValidatingWebhookConfiguration
+    - group: "storage.k8s.io"
+      kind: StorageClass
+    - group: "monitoring.coreos.com"
+      kind: ServiceMonitor
+    - group: "monitoring.coreos.com"
+      kind: PrometheusRule
+
+  # Namespace resource whitelist
+  namespaceResourceWhitelist:
+    - group: ""
+      kind: ConfigMap
+    - group: ""
+      kind: Secret
+    - group: ""
+      kind: Service
+    - group: ""
+      kind: ServiceAccount
+    - group: ""
+      kind: PersistentVolumeClaim
+    - group: "apps"
+      kind: Deployment
+    - group: "apps"
+      kind: StatefulSet
+    - group: "apps"
+      kind: ReplicaSet
+    - group: "apps"
+      kind: DaemonSet
+    - group: "batch"
+      kind: Job
+    - group: "batch"
+      kind: CronJob
+    - group: "networking.k8s.io"
+      kind: Ingress
+    - group: "networking.k8s.io"
+      kind: NetworkPolicy
+    - group: "policy"
+      kind: PodDisruptionBudget
+    - group: "autoscaling"
+      kind: HorizontalPodAutoscaler
+    - group: "kube-green.com"
+      kind: SleepInfo
+    - group: "monitoring.coreos.com"
+      kind: ServiceMonitor
+    - group: "monitoring.coreos.com"
+      kind: PrometheusRule
+
+  # RBAC policies
+  roles:
+    # Developer role - can sync staging and development
+    - name: developer
+      description: Developer access for staging and development environments
+      policies:
+        - p, proj:k8s-resource-optimization:developer, applications, get, k8s-resource-optimization/staging-*, allow
+        - p, proj:k8s-resource-optimization:developer, applications, sync, k8s-resource-optimization/staging-*, allow
+        - p, proj:k8s-resource-optimization:developer, applications, get, k8s-resource-optimization/development-*, allow
+        - p, proj:k8s-resource-optimization:developer, applications, sync, k8s-resource-optimization/development-*, allow
+        - p, proj:k8s-resource-optimization:developer, applications, action/*, k8s-resource-optimization/staging-*, deny
+        - p, proj:k8s-resource-optimization:developer, applications, action/*, k8s-resource-optimization/development-*, deny
+      groups:
+        - "your-org:developers"
+
+    # DevOps role - can manage all environments except production deletion
+    - name: devops
+      description: DevOps access for all environments
+      policies:
+        - p, proj:k8s-resource-optimization:devops, applications, *, k8s-resource-optimization/*, allow
+        - p, proj:k8s-resource-optimization:devops, applications, delete, k8s-resource-optimization/production-*, deny
+      groups:
+        - "your-org:devops"
+
+    # Admin role - full access
+    - name: admin
+      description: Full administrative access
+      policies:
+        - p, proj:k8s-resource-optimization:admin, applications, *, k8s-resource-optimization/*, allow
+        - p, proj:k8s-resource-optimization:admin, repositories, *, *, allow
+        - p, proj:k8s-resource-optimization:admin, clusters, *, *, allow
+      groups:
+        - "your-org:admins"
+
+  # Sync windows for controlled deployments
+  syncWindows:
+    - kind: allow
+      schedule: "0 8-18 * * 1-5" # Business hours weekdays
+      duration: 10h
+      applications:
+        - "staging-*"
+        - "development-*"
+      manualSync: true
+
+    - kind: deny
+      schedule: "0 18-8 * * 1-5" # After hours weekdays
+      duration: 14h
+      applications:
+        - "production-*"
+      manualSync: false
+
+    - kind: deny
+      schedule: "0 0-23 * * 0,6" # Weekends
+      duration: 24h
+      applications:
+        - "production-*"
+      manualSync: false
+
+  # Notification settings
+  signatureKeys:
+    - keyID: default
+
+  # Orphaned resources handling
+  orphanedResources:
+    warn: true
+    ignore:
+      - group: ""
+        kind: Secret
+        name: "*-token-*" # Service account tokens
+      - group: ""
+        kind: ConfigMap
+        name: "kube-root-ca.crt"

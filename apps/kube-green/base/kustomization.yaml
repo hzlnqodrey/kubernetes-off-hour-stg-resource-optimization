@@ -1,0 +1,55 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+metadata:
+  name: kube-green-base
+
+resources:
+  - namespace.yaml
+  - operator.yaml
+  - rbac.yaml
+  - sleepinfo-crd.yaml
+  - sleepinfo-staging.yaml
+  - sleepinfo-development.yaml
+
+commonLabels:
+  app.kubernetes.io/name: kube-green
+  app.kubernetes.io/component: operator
+  app.kubernetes.io/part-of: k8s-resource-optimization
+
+images:
+  - name: kubegreen/kube-green
+    newTag: v0.5.1
+
+configMapGenerator:
+  - name: kube-green-config
+    literals:
+      - LOG_LEVEL=info
+      - ENABLE_WEBHOOKS=true
+      - METRICS_ADDR=:8080
+      - HEALTH_PROBE_ADDR=:8081
+
+secretGenerator:
+  - name: kube-green-webhook-certs
+    type: kubernetes.io/tls
+    files:
+      - tls.crt=webhook-certs/tls.crt
+      - tls.key=webhook-certs/tls.key
+
+patchesStrategicMerge:
+  - patches/deployment-patch.yaml
+  - patches/webhook-patch.yaml
+
+replacements:
+  - source:
+      kind: ConfigMap
+      name: kube-green-config
+      fieldPath: data.LOG_LEVEL
+    targets:
+      - select:
+          kind: Deployment
+          name: kube-green-controller-manager
+        fieldPaths:
+          - spec.template.spec.containers.[name=manager].env.[name=LOG_LEVEL].value
+
+namespace: kube-green-system

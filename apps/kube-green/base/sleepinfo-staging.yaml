@@ -1,0 +1,138 @@
+apiVersion: kube-green.com/v1alpha1
+kind: SleepInfo
+metadata:
+  name: staging-sleep-schedule
+  namespace: staging
+  labels:
+    app.kubernetes.io/name: kube-green
+    app.kubernetes.io/component: sleepinfo
+    app.kubernetes.io/part-of: k8s-resource-optimization
+    environment: staging
+  annotations:
+    argocd.argoproj.io/sync-wave: "2"
+    kube-green.dev/description: "Automated resource optimization for staging environment"
+    kube-green.dev/slack-notifications: "enabled"
+    kube-green.dev/manual-override: "enabled"
+spec:
+  # Weekday schedule: Sleep at 6 PM, Wake up at 8 AM (14 hours of sleep = 58% daily savings)
+  weekdaysSleepAt: "18:00"
+  weekdaysWakeUpAt: "08:00"
+
+  # Weekend schedule: Sleep Friday 6 PM, Wake up Monday 8 AM (62 hours of sleep = 100% weekend savings)
+  weekendsSleepAt: "18:00"
+  weekendsWakeUpAt: "08:00"
+
+  # Timezone configuration
+  timeZone: "UTC"
+
+  # Suspend cron jobs during sleep to prevent unnecessary resource consumption
+  suspendCronJobs: true
+
+  # Exclude critical services from sleep operations
+  excludeRef:
+    - apiVersion: "apps/v1"
+      kind: "Deployment"
+      name: "monitoring-agent"
+    - apiVersion: "apps/v1"
+      kind: "Deployment"
+      matchLabels:
+        app.kubernetes.io/component: "security"
+    - apiVersion: "apps/v1"
+      kind: "Deployment"
+      matchLabels:
+        kube-green.dev/exclude: "true"
+    - apiVersion: "v1"
+      kind: "Service"
+      matchLabels:
+        service-type: "loadbalancer"
+    - apiVersion: "apps/v1"
+      kind: "StatefulSet"
+      matchLabels:
+        app.kubernetes.io/component: "database"
+    - apiVersion: "batch/v1"
+      kind: "CronJob"
+      matchLabels:
+        kube-green.dev/critical: "true"
+
+  # Custom patches for specific resources during sleep/wake cycles
+  patches:
+    - type: "strategic"
+      target:
+        kind: "Deployment"
+        group: "apps"
+        version: "v1"
+        name: "nginx-ingress-controller"
+      patch: |
+        spec:
+          replicas: 1
+    - type: "merge"
+      target:
+        kind: "HorizontalPodAutoscaler"
+        group: "autoscaling"
+        version: "v2"
+      patch: |
+        spec:
+          minReplicas: 0
+          maxReplicas: 1
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: staging-sleep-config
+  namespace: staging
+  labels:
+    app.kubernetes.io/name: kube-green
+    app.kubernetes.io/component: config
+    environment: staging
+  annotations:
+    argocd.argoproj.io/sync-wave: "1"
+data:
+  environment: "staging"
+  sleep-schedule: "staging-sleep-schedule"
+  slack-channel: "#k8s-optimization-staging"
+  webhook-url: "https://hooks.slack.com/services/YOUR/STAGING/WEBHOOK"
+  cost-tracking: "enabled"
+
+  # Resource scaling policies
+  deployment-scaling-policy: |
+    {
+      "default": {
+        "sleep": {"replicas": 0},
+        "wake": {"restore": true}
+      },
+      "exceptions": {
+        "monitoring-*": {"sleep": {"replicas": 1}},
+        "*-database": {"exclude": true}
+      }
+    }
+
+  # Holiday schedule overrides
+  holiday-schedule: |
+    # Christmas shutdown: Dec 24 - Jan 2
+    christmas_start: "2024-12-24T18:00:00Z"
+    christmas_end: "2025-01-02T08:00:00Z"
+
+    # Spring break: March 15-22
+    spring_break_start: "2025-03-15T18:00:00Z"
+    spring_break_end: "2025-03-22T08:00:00Z"
+
+  # Emergency contacts and procedures
+  emergency-contacts: |
+    - name: "DevOps Team"
+      slack: "@devops-team"
+      email: "devops@company.com"
+    - name: "Platform Engineering"
+      slack: "@platform-eng"
+      email: "platform@company.com"
+
+  # Manual override instructions
+  manual-override-instructions: |
+    To manually wake up staging environment:
+    1. Use Slack command: /k8s-wake staging
+    2. Or click the "Wake Up Staging" button in #k8s-optimization-staging
+    3. Or use GitLab pipeline with manual trigger
+
+    To manually sleep staging environment:
+    1. Use Slack command: /k8s-sleep staging
+    2. Or click the "Sleep Staging" button in #k8s-optimization-staging
+    3. Emergency contacts will be notified of manual operations

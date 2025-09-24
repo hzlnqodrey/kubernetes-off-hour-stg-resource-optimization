@@ -1,0 +1,267 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: kube-green-operator
+  namespace: argocd
+  labels:
+    app.kubernetes.io/name: argocd-application
+    app.kubernetes.io/component: kube-green-operator
+    app.kubernetes.io/part-of: k8s-resource-optimization
+    tier: infrastructure
+  annotations:
+    argocd.argoproj.io/sync-wave: "1"
+    notifications.argoproj.io/subscribe.on-sync-succeeded.slack: k8s-optimization
+    notifications.argoproj.io/subscribe.on-health-degraded.slack: k8s-optimization-alerts
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: k8s-resource-optimization
+  source:
+    repoURL: https://gitlab.com/your-org/k8s-resource-optimization.git
+    targetRevision: HEAD
+    path: apps/kube-green/base
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: kube-green-system
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+      allowEmpty: false
+    syncOptions:
+      - CreateNamespace=true
+      - PrunePropagationPolicy=foreground
+      - PruneLast=true
+      - ApplyOutOfSyncOnly=true
+    retry:
+      limit: 5
+      backoff:
+        duration: 5s
+        factor: 2
+        maxDuration: 3m
+  revisionHistoryLimit: 10
+  info:
+    - name: Description
+      value: kube-green operator for Kubernetes resource optimization
+    - name: Documentation
+      value: https://kube-green.dev/docs/
+    - name: Repository
+      value: https://github.com/kube-green/kube-green
+    - name: Slack Channel
+      value: "#k8s-optimization"
+---
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: kube-green-staging
+  namespace: argocd
+  labels:
+    app.kubernetes.io/name: argocd-application
+    app.kubernetes.io/component: kube-green-staging
+    app.kubernetes.io/part-of: k8s-resource-optimization
+    environment: staging
+    tier: configuration
+  annotations:
+    argocd.argoproj.io/sync-wave: "2"
+    notifications.argoproj.io/subscribe.on-sync-succeeded.slack: k8s-optimization-staging
+    notifications.argoproj.io/subscribe.on-health-degraded.slack: k8s-optimization-alerts
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: k8s-resource-optimization
+  source:
+    repoURL: https://gitlab.com/your-org/k8s-resource-optimization.git
+    targetRevision: HEAD
+    path: apps/kube-green/overlays/staging
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: kube-green-system
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+      allowEmpty: false
+    syncOptions:
+      - CreateNamespace=true
+      - PrunePropagationPolicy=foreground
+      - PruneLast=true
+      - ApplyOutOfSyncOnly=true
+    retry:
+      limit: 5
+      backoff:
+        duration: 5s
+        factor: 2
+        maxDuration: 3m
+  revisionHistoryLimit: 10
+  info:
+    - name: Description
+      value: kube-green configuration for staging environment
+    - name: Environment
+      value: staging
+    - name: Sleep Schedule
+      value: "Weekdays 18:00-08:00, Weekends 18:00-08:00"
+    - name: Cost Savings
+      value: "Estimated 58% daily, 100% weekend"
+    - name: Slack Channel
+      value: "#k8s-optimization-staging"
+---
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: kube-green-production
+  namespace: argocd
+  labels:
+    app.kubernetes.io/name: argocd-application
+    app.kubernetes.io/component: kube-green-production
+    app.kubernetes.io/part-of: k8s-resource-optimization
+    environment: production
+    tier: configuration
+    criticality: high
+  annotations:
+    argocd.argoproj.io/sync-wave: "3"
+    notifications.argoproj.io/subscribe.on-sync-succeeded.slack: k8s-optimization-prod
+    notifications.argoproj.io/subscribe.on-health-degraded.slack: k8s-optimization-alerts
+    argocd.argoproj.io/sync-options: SkipDryRunOnMissingResource=true
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: k8s-resource-optimization
+  source:
+    repoURL: https://gitlab.com/your-org/k8s-resource-optimization.git
+    targetRevision: HEAD
+    path: apps/kube-green/overlays/production
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: kube-green-system
+  syncPolicy:
+    automated:
+      prune: false # Manual approval required for production
+      selfHeal: false
+      allowEmpty: false
+    syncOptions:
+      - CreateNamespace=true
+      - PrunePropagationPolicy=foreground
+      - PruneLast=true
+      - ApplyOutOfSyncOnly=true
+    retry:
+      limit: 3
+      backoff:
+        duration: 10s
+        factor: 2
+        maxDuration: 5m
+  revisionHistoryLimit: 20
+  info:
+    - name: Description
+      value: kube-green configuration for production environment
+    - name: Environment
+      value: production
+    - name: Sleep Schedule
+      value: "Conservative scheduling with backup policies"
+    - name: Manual Approval
+      value: "Required for all production changes"
+    - name: Slack Channel
+      value: "#k8s-optimization-prod"
+---
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: slack-webhook-service
+  namespace: argocd
+  labels:
+    app.kubernetes.io/name: argocd-application
+    app.kubernetes.io/component: slack-webhook
+    app.kubernetes.io/part-of: k8s-resource-optimization
+    tier: integration
+  annotations:
+    argocd.argoproj.io/sync-wave: "2"
+    notifications.argoproj.io/subscribe.on-sync-succeeded.slack: k8s-optimization
+    notifications.argoproj.io/subscribe.on-health-degraded.slack: k8s-optimization-alerts
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: k8s-resource-optimization
+  source:
+    repoURL: https://gitlab.com/your-org/k8s-resource-optimization.git
+    targetRevision: HEAD
+    path: apps/slack-integration
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: kube-green-system
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+      allowEmpty: false
+    syncOptions:
+      - CreateNamespace=true
+      - PrunePropagationPolicy=foreground
+      - PruneLast=true
+      - ApplyOutOfSyncOnly=true
+    retry:
+      limit: 5
+      backoff:
+        duration: 5s
+        factor: 2
+        maxDuration: 3m
+  revisionHistoryLimit: 10
+  info:
+    - name: Description
+      value: Slack integration service for manual overrides and notifications
+    - name: Webhook URL
+      value: "https://k8s-optimization-webhook.example.com/webhook"
+    - name: Supported Commands
+      value: "/k8s-wake, /k8s-sleep, /k8s-status, /k8s-schedule, /k8s-cost"
+    - name: Slack Channels
+      value: "#k8s-optimization, #k8s-optimization-staging, #k8s-optimization-prod"
+---
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: monitoring-stack
+  namespace: argocd
+  labels:
+    app.kubernetes.io/name: argocd-application
+    app.kubernetes.io/component: monitoring
+    app.kubernetes.io/part-of: k8s-resource-optimization
+    tier: observability
+  annotations:
+    argocd.argoproj.io/sync-wave: "3"
+    notifications.argoproj.io/subscribe.on-sync-succeeded.slack: k8s-optimization
+    notifications.argoproj.io/subscribe.on-health-degraded.slack: k8s-optimization-alerts
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: k8s-resource-optimization
+  source:
+    repoURL: https://gitlab.com/your-org/k8s-resource-optimization.git
+    targetRevision: HEAD
+    path: apps/monitoring
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: monitoring
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+      allowEmpty: false
+    syncOptions:
+      - CreateNamespace=true
+      - PrunePropagationPolicy=foreground
+      - PruneLast=true
+      - ServerSideApply=true
+    retry:
+      limit: 5
+      backoff:
+        duration: 5s
+        factor: 2
+        maxDuration: 3m
+  revisionHistoryLimit: 10
+  info:
+    - name: Description
+      value: Monitoring stack for cost optimization and system health
+    - name: Components
+      value: "Prometheus, Grafana, AlertManager"
+    - name: Dashboards
+      value: "Cost optimization, Resource utilization, System health"
+    - name: Alerts
+      value: "Sleep/wake failures, Cost anomalies, System issues"

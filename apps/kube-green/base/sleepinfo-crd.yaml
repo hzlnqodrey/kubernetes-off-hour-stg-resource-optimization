@@ -1,0 +1,183 @@
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  name: sleepinfos-kube-green
+  labels:
+    app.kubernetes.io/name: kube-green
+    app.kubernetes.io/component: crd
+  annotations:
+    argocd.argoproj.io/sync-wave: "-1"
+    controller-gen.kubebuilder.io/version: v0.11.1
+spec:
+  group: kube-green.com
+  names:
+    kind: SleepInfo
+    listKind: SleepInfoList
+    plural: sleepinfos
+    singular: sleepinfo
+  scope: Namespaced
+  versions:
+    - additionalPrinterColumns:
+        - jsonPath: .spec.weekdaysSleepAt
+          name: Weekdays Sleep At
+          type: string
+        - jsonPath: .spec.weekdaysWakeUpAt
+          name: Weekdays Wake Up At
+          type: string
+        - jsonPath: .spec.weekendsSleepAt
+          name: Weekends Sleep At
+          type: string
+        - jsonPath: .spec.weekendsWakeUpAt
+          name: Weekends Wake Up At
+          type: string
+        - jsonPath: .status.operation.type
+          name: Current Operation
+          type: string
+        - jsonPath: .metadata.creationTimestamp
+          name: Age
+          type: date
+      name: v1alpha1
+      schema:
+        openAPIV3Schema:
+          description: SleepInfo is the Schema for the sleepinfos API
+          properties:
+            apiVersion:
+              description:
+                "APIVersion defines the versioned schema of this representation
+                of an object."
+              type: string
+            kind:
+              description:
+                "Kind is a string value representing the REST resource this
+                object represents."
+              type: string
+            metadata:
+              type: object
+            spec:
+              description: SleepInfoSpec defines the desired state of SleepInfo
+              properties:
+                excludeRef:
+                  description: ExcludeRef define the resource to exclude from sleep
+                  items:
+                    description: ExcludeRef defines the resource to exclude from sleep
+                    properties:
+                      apiVersion:
+                        description: ApiVersion of the kubernetes resource
+                        type: string
+                      kind:
+                        description: Kind of the kubernetes resource
+                        type: string
+                      matchLabels:
+                        additionalProperties:
+                          type: string
+                        description: MatchLabels defines the labels to match
+                        type: object
+                      name:
+                        description: Name of the kubernetes resource
+                        type: string
+                    required:
+                      - apiVersion
+                      - kind
+                    type: object
+                  type: array
+                patches:
+                  description: Patches is a list of patches to apply to the resources
+                  items:
+                    description: Patch defines a patch to apply to the resources
+                    properties:
+                      patch:
+                        description: Patch is the patch to apply
+                        type: string
+                      target:
+                        description: Target is the target of the patch
+                        properties:
+                          group:
+                            description: Group of the target
+                            type: string
+                          kind:
+                            description: Kind of the target
+                            type: string
+                          name:
+                            description: Name of the target
+                            type: string
+                          version:
+                            description: Version of the target
+                            type: string
+                        required:
+                          - kind
+                        type: object
+                      type:
+                        description: Type is the type of the patch
+                        enum:
+                          - strategic
+                          - merge
+                          - json
+                        type: string
+                    required:
+                      - patch
+                      - target
+                      - type
+                    type: object
+                  type: array
+                sleepAt:
+                  description: Hours:Minutes
+                  pattern: ^((0?[0-9])|(1[0-9])|(2[0-3])):[0-5][0-9]$
+                  type: string
+                suspendCronJobs:
+                  description: SuspendCronJobs defines if the cronjobs should be suspended
+                  type: boolean
+                timeZone:
+                  description: Time zone to set the schedule
+                  type: string
+                wakeUpAt:
+                  description: Hours:Minutes
+                  pattern: ^((0?[0-9])|(1[0-9])|(2[0-3])):[0-5][0-9]$
+                  type: string
+                weekdaysSleepAt:
+                  description: "Hours:Minutes (default: sleepAt)"
+                  pattern: ^((0?[0-9])|(1[0-9])|(2[0-3])):[0-5][0-9]$
+                  type: string
+                weekdaysWakeUpAt:
+                  description: "Hours:Minutes (default: wakeUpAt)"
+                  pattern: ^((0?[0-9])|(1[0-9])|(2[0-3])):[0-5][0-9]$
+                  type: string
+                weekendsSleepAt:
+                  description: "Hours:Minutes (default: sleepAt)"
+                  pattern: ^((0?[0-9])|(1[0-9])|(2[0-3])):[0-5][0-9]$
+                  type: string
+                weekendsWakeUpAt:
+                  description: "Hours:Minutes (default: wakeUpAt)"
+                  pattern: ^((0?[0-9])|(1[0-9])|(2[0-3])):[0-5][0-9]$
+                  type: string
+              type: object
+            status:
+              description: SleepInfoStatus defines the observed state of SleepInfo
+              properties:
+                lastScheduleTime:
+                  description: Information when was the last time the sleep was scheduled.
+                  format: date-time
+                  type: string
+                operation:
+                  description: Operation type
+                  properties:
+                    type:
+                      description: OperationType is the type of operation
+                      enum:
+                        - Sleep
+                        - WakeUp
+                      type: string
+                  required:
+                    - type
+                  type: object
+              type: object
+          type: object
+      served: true
+      storage: true
+      subresources:
+        status: {}
+status:
+  acceptedNames:
+    kind: ""
+    plural: ""
+  conditions: []
+  storedVersions: []

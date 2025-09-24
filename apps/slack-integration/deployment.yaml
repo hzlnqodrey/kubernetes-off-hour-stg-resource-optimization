@@ -1,0 +1,245 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: slack-webhook-service
+  namespace: kube-green-system
+  labels:
+    app.kubernetes.io/name: slack-webhook
+    app.kubernetes.io/component: webhook-service
+    app.kubernetes.io/part-of: k8s-resource-optimization
+    app.kubernetes.io/version: v1.0.0
+  annotations:
+    argocd.argoproj.io/sync-wave: "2"
+    deployment.kubernetes.io/revision: "1"
+spec:
+  replicas: 3
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 1
+      maxSurge: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: slack-webhook
+      app.kubernetes.io/component: webhook-service
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: slack-webhook
+        app.kubernetes.io/component: webhook-service
+        app.kubernetes.io/part-of: k8s-resource-optimization
+        app.kubernetes.io/version: v1.0.0
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "8080"
+        prometheus.io/path: "/metrics"
+        kubectl.kubernetes.io/default-container: slack-webhook
+    spec:
+      serviceAccountName: slack-webhook-service
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 65532
+        runAsGroup: 65532
+        fsGroup: 65532
+        seccompProfile:
+          type: RuntimeDefault
+      terminationGracePeriodSeconds: 30
+      containers:
+        - name: slack-webhook
+          image: slack-webhook:latest
+          imagePullPolicy: IfNotPresent
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+                - "ALL"
+            readOnlyRootFilesystem: true
+            runAsNonRoot: true
+          ports:
+            - name: http
+              containerPort: 8080
+              protocol: TCP
+            - name: webhook
+              containerPort: 8443
+              protocol: TCP
+            - name: metrics
+              containerPort: 9090
+              protocol: TCP
+          env:
+            - name: PORT
+              value: "8080"
+            - name: WEBHOOK_PORT
+              value: "8443"
+            - name: METRICS_PORT
+              value: "9090"
+            - name: LOG_LEVEL
+              valueFrom:
+                configMapKeyRef:
+                  name: slack-webhook-config
+                  key: LOG_LEVEL
+            - name: SLACK_BOT_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: slack-webhook-secrets
+                  key: SLACK_BOT_TOKEN
+            - name: SLACK_SIGNING_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: slack-webhook-secrets
+                  key: SLACK_SIGNING_SECRET
+            - name: SLACK_APP_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: slack-webhook-secrets
+                  key: SLACK_APP_TOKEN
+            - name: GITLAB_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: slack-webhook-secrets
+                  key: GITLAB_TOKEN
+            - name: ARGOCD_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: slack-webhook-secrets
+                  key: ARGOCD_TOKEN
+            - name: KUBECONFIG
+              value: "/etc/kubeconfig/config"
+            - name: NAMESPACE
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.namespace
+            - name: POD_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.name
+            - name: POD_IP
+              valueFrom:
+                fieldRef:
+                  fieldPath: status.podIP
+            - name: SLACK_CHANNEL_STAGING
+              valueFrom:
+                configMapKeyRef:
+                  name: slack-webhook-config
+                  key: SLACK_CHANNEL_STAGING
+            - name: SLACK_CHANNEL_PRODUCTION
+              valueFrom:
+                configMapKeyRef:
+                  name: slack-webhook-config
+                  key: SLACK_CHANNEL_PRODUCTION
+            - name: GITLAB_PROJECT_ID
+              valueFrom:
+                configMapKeyRef:
+                  name: slack-webhook-config
+                  key: GITLAB_PROJECT_ID
+            - name: ARGOCD_SERVER
+              valueFrom:
+                configMapKeyRef:
+                  name: slack-webhook-config
+                  key: ARGOCD_SERVER
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: http
+              scheme: HTTP
+            initialDelaySeconds: 30
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 3
+            successThreshold: 1
+          readinessProbe:
+            httpGet:
+              path: /ready
+              port: http
+              scheme: HTTP
+            initialDelaySeconds: 5
+            periodSeconds: 5
+            timeoutSeconds: 3
+            failureThreshold: 3
+            successThreshold: 1
+          startupProbe:
+            httpGet:
+              path: /startup
+              port: http
+              scheme: HTTP
+            initialDelaySeconds: 10
+            periodSeconds: 10
+            timeoutSeconds: 3
+            failureThreshold: 30
+            successThreshold: 1
+          resources:
+            limits:
+              cpu: 500m
+              memory: 512Mi
+              ephemeral-storage: 1Gi
+            requests:
+              cpu: 100m
+              memory: 128Mi
+              ephemeral-storage: 100Mi
+          volumeMounts:
+            - name: kubeconfig
+              mountPath: /etc/kubeconfig
+              readOnly: true
+            - name: webhook-certs
+              mountPath: /etc/ssl/certs/webhook
+              readOnly: true
+            - name: tmp
+              mountPath: /tmp
+            - name: var-run
+              mountPath: /var/run
+            - name: var-cache
+              mountPath: /var/cache
+      volumes:
+        - name: kubeconfig
+          secret:
+            secretName: slack-webhook-kubeconfig
+            defaultMode: 420
+        - name: webhook-certs
+          secret:
+            secretName: slack-webhook-tls
+            defaultMode: 420
+        - name: tmp
+          emptyDir:
+            sizeLimit: 100Mi
+        - name: var-run
+          emptyDir:
+            sizeLimit: 100Mi
+        - name: var-cache
+          emptyDir:
+            sizeLimit: 100Mi
+      affinity:
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - weight: 100
+              podAffinityTerm:
+                labelSelector:
+                  matchLabels:
+                    app.kubernetes.io/name: slack-webhook
+                topologyKey: kubernetes.io/hostname
+        nodeAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - weight: 100
+              preference:
+                matchExpressions:
+                  - key: node-type
+                    operator: In
+                    values:
+                      - "general-purpose"
+      tolerations:
+        - key: node-role.kubernetes.io/control-plane
+          operator: Exists
+          effect: NoSchedule
+        - key: node.kubernetes.io/not-ready
+          operator: Exists
+          effect: NoExecute
+          tolerationSeconds: 300
+        - key: node.kubernetes.io/unreachable
+          operator: Exists
+          effect: NoExecute
+          tolerationSeconds: 300
+      topologySpreadConstraints:
+        - maxSkew: 1
+          topologyKey: kubernetes.io/hostname
+          whenUnsatisfiable: DoNotSchedule
+          labelSelector:
+            matchLabels:
+              app.kubernetes.io/name: slack-webhook

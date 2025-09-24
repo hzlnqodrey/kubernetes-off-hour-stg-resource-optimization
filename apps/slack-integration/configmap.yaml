@@ -1,0 +1,309 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: slack-webhook-config
+  namespace: kube-green-system
+  labels:
+    app.kubernetes.io/name: slack-webhook
+    app.kubernetes.io/component: config
+    app.kubernetes.io/part-of: k8s-resource-optimization
+  annotations:
+    argocd.argoproj.io/sync-wave: "1"
+data:
+  # Logging configuration
+  LOG_LEVEL: "info"
+  LOG_FORMAT: "json"
+
+  # Slack configuration
+  SLACK_CHANNEL_STAGING: "#k8s-optimization-staging"
+  SLACK_CHANNEL_PRODUCTION: "#k8s-optimization-prod"
+  SLACK_CHANNEL_DEVELOPMENT: "#k8s-optimization-dev"
+  SLACK_CHANNEL_ALERTS: "#k8s-optimization-alerts"
+
+  # GitLab configuration
+  GITLAB_PROJECT_ID: "12345"
+  GITLAB_BASE_URL: "https://gitlab.com"
+  GITLAB_API_VERSION: "v4"
+
+  # ArgoCD configuration
+  ARGOCD_SERVER: "argocd.example.com"
+  ARGOCD_API_VERSION: "v1alpha1"
+
+  # Webhook configuration
+  WEBHOOK_TIMEOUT: "30s"
+  WEBHOOK_RETRY_ATTEMPTS: "3"
+  WEBHOOK_RETRY_DELAY: "5s"
+
+  # Application configuration
+  app-config.yaml: |
+    server:
+      port: 8080
+      webhook_port: 8443
+      metrics_port: 9090
+      read_timeout: 30s
+      write_timeout: 30s
+      idle_timeout: 60s
+      
+    slack:
+      verification_token_required: true
+      rate_limit:
+        requests_per_minute: 60
+        burst: 10
+      
+      # Slash commands configuration
+      commands:
+        - name: "/k8s-wake"
+          description: "Wake up a Kubernetes environment"
+          usage: "/k8s-wake [staging|production|development]"
+          permissions: ["developer", "devops", "admin"]
+          
+        - name: "/k8s-sleep"
+          description: "Put a Kubernetes environment to sleep"
+          usage: "/k8s-sleep [staging|production|development]"
+          permissions: ["devops", "admin"]
+          
+        - name: "/k8s-status"
+          description: "Check status of Kubernetes environments"
+          usage: "/k8s-status [staging|production|development|all]"
+          permissions: ["developer", "devops", "admin"]
+          
+        - name: "/k8s-schedule"
+          description: "Schedule sleep/wake operations"
+          usage: "/k8s-schedule [environment] [sleep|wake] [time]"
+          permissions: ["devops", "admin"]
+          
+        - name: "/k8s-cost"
+          description: "Get cost optimization report"
+          usage: "/k8s-cost [environment] [period]"
+          permissions: ["developer", "devops", "admin", "finance"]
+      
+      # Interactive buttons configuration
+      buttons:
+        - id: "wake_staging"
+          label: "🟢 Wake Staging"
+          style: "primary"
+          action: "wake"
+          environment: "staging"
+          confirmation_required: false
+          
+        - id: "sleep_staging"
+          label: "💤 Sleep Staging"
+          style: "danger"
+          action: "sleep"
+          environment: "staging"
+          confirmation_required: true
+          
+        - id: "wake_production"
+          label: "🟢 Wake Production"
+          style: "primary"
+          action: "wake"
+          environment: "production"
+          confirmation_required: true
+          permissions: ["devops", "admin"]
+          
+        - id: "sleep_production"
+          label: "💤 Sleep Production"
+          style: "danger"
+          action: "sleep"
+          environment: "production"
+          confirmation_required: true
+          permissions: ["admin"]
+          
+        - id: "emergency_wake_all"
+          label: "🚨 Emergency Wake All"
+          style: "danger"
+          action: "emergency_wake"
+          environment: "all"
+          confirmation_required: true
+          permissions: ["admin"]
+
+    kubernetes:
+      in_cluster: true
+      namespace: "kube-green-system"
+      dry_run: false
+      
+      # Environment mappings
+      environments:
+        staging:
+          namespace: "staging"
+          sleepinfo: "staging-sleep-schedule"
+          argocd_app: "k8s-optimization-staging"
+          
+        production:
+          namespace: "production"
+          sleepinfo: "production-sleep-schedule"
+          argocd_app: "k8s-optimization-production"
+          
+        development:
+          namespace: "development"
+          sleepinfo: "development-sleep-schedule"
+          argocd_app: "k8s-optimization-development"
+
+    gitlab:
+      webhook_events:
+        - "deployment"
+        - "pipeline"
+        - "merge_request"
+      
+      # GitOps workflow configuration
+      gitops:
+        branch: "main"
+        commit_message_template: "feat: {{action}} {{environment}} via Slack integration"
+        auto_merge: false
+        create_merge_request: true
+        mr_title_template: "{{action}} {{environment}} - Manual Override"
+        mr_description_template: |
+          ## Manual Kubernetes Resource Operation
+          
+          **Action**: {{action}}
+          **Environment**: {{environment}}
+          **Triggered by**: {{user}}
+          **Timestamp**: {{timestamp}}
+          **Reason**: {{reason}}
+          
+          ### Changes
+          - Modified SleepInfo resource for {{environment}}
+          - {{action_description}}
+          
+          ### Validation
+          - [ ] Environment status confirmed
+          - [ ] Resource scaling validated
+          - [ ] Cost impact assessed
+          
+          Auto-generated by Slack Webhook Service
+
+    monitoring:
+      metrics_enabled: true
+      health_check_interval: "30s"
+      
+      # Custom metrics
+      custom_metrics:
+        - name: "slack_webhook_requests_total"
+          help: "Total number of Slack webhook requests"
+          type: "counter"
+          labels: ["command", "environment", "status"]
+          
+        - name: "k8s_environment_state_changes_total"
+          help: "Total number of environment state changes"
+          type: "counter"
+          labels: ["environment", "action", "trigger"]
+          
+        - name: "slack_command_duration_seconds"
+          help: "Duration of Slack command processing"
+          type: "histogram"
+          labels: ["command", "environment"]
+          
+        - name: "gitlab_api_requests_total"
+          help: "Total number of GitLab API requests"
+          type: "counter"
+          labels: ["method", "endpoint", "status"]
+          
+        - name: "argocd_sync_operations_total"
+          help: "Total number of ArgoCD sync operations"
+          type: "counter"
+          labels: ["application", "status"]
+
+  # Security configuration
+  security-config.yaml: |
+    authentication:
+      slack_verification: true
+      jwt_enabled: false
+      
+    authorization:
+      rbac_enabled: true
+      default_role: "viewer"
+      
+      roles:
+        viewer:
+          permissions: ["status", "cost"]
+          
+        developer:
+          permissions: ["status", "cost", "wake"]
+          environments: ["staging", "development"]
+          
+        devops:
+          permissions: ["status", "cost", "wake", "sleep", "schedule"]
+          environments: ["staging", "development", "production"]
+          
+        admin:
+          permissions: ["*"]
+          environments: ["*"]
+      
+      # User role mappings (Slack user IDs or email domains)
+      user_roles:
+        "@admin.com": "admin"
+        "@devops.com": "devops"
+        "@developer.com": "developer"
+        
+    rate_limiting:
+      global_rate_limit: 100  # requests per minute
+      user_rate_limit: 10     # requests per minute per user
+      command_cooldown: 30    # seconds between same command execution
+      
+    audit:
+      enabled: true
+      log_all_requests: true
+      retention_days: 90
+
+  # Notification templates
+  notification-templates.yaml: |
+    templates:
+      sleep_notification:
+        title: "💤 Environment Sleeping"
+        color: "#36a64f"
+        message: |
+          Environment `{{environment}}` is now sleeping.
+          
+          **Details:**
+          • Trigger: {{trigger}}
+          • Time: {{timestamp}}
+          • Duration: {{duration}}
+          • Cost Savings: {{cost_savings}}
+          
+          **Resources Affected:**
+          {{#resources}}
+          • {{type}}: {{name}} ({{replicas}} → 0)
+          {{/resources}}
+      
+      wake_notification:
+        title: "🟢 Environment Waking Up"
+        color: "#ff9900"
+        message: |
+          Environment `{{environment}}` is waking up.
+          
+          **Details:**
+          • Trigger: {{trigger}}
+          • Time: {{timestamp}}
+          • ETA: {{eta}}
+          
+          **Resources Starting:**
+          {{#resources}}
+          • {{type}}: {{name}} (0 → {{replicas}})
+          {{/resources}}
+      
+      error_notification:
+        title: "🚨 Operation Failed"
+        color: "#ff0000"
+        message: |
+          Failed to {{action}} environment `{{environment}}`.
+          
+          **Error:** {{error_message}}
+          **Time:** {{timestamp}}
+          **User:** {{user}}
+          
+          Please check the logs or contact the DevOps team.
+      
+      cost_report:
+        title: "💰 Cost Optimization Report"
+        color: "#0066cc"
+        message: |
+          **Cost Optimization Report for {{period}}**
+          
+          {{#environments}}
+          **{{name}}:**
+          • Sleep Hours: {{sleep_hours}}
+          • Cost Saved: ${{cost_saved}}
+          • Efficiency: {{efficiency}}%
+          {{/environments}}
+          
+          **Total Savings: ${{total_saved}}**

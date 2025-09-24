@@ -1,0 +1,204 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: slack-webhook-service
+  namespace: kube-green-system
+  labels:
+    app.kubernetes.io/name: slack-webhook
+    app.kubernetes.io/component: webhook-service
+    app.kubernetes.io/part-of: k8s-resource-optimization
+  annotations:
+    argocd.argoproj.io/sync-wave: "2"
+    prometheus.io/scrape: "true"
+    prometheus.io/port: "9090"
+    prometheus.io/path: "/metrics"
+spec:
+  type: ClusterIP
+  selector:
+    app.kubernetes.io/name: slack-webhook
+    app.kubernetes.io/component: webhook-service
+  ports:
+    - name: http
+      port: 80
+      targetPort: http
+      protocol: TCP
+    - name: webhook
+      port: 8443
+      targetPort: webhook
+      protocol: TCP
+    - name: metrics
+      port: 9090
+      targetPort: metrics
+      protocol: TCP
+  sessionAffinity: None
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: slack-webhook-service-headless
+  namespace: kube-green-system
+  labels:
+    app.kubernetes.io/name: slack-webhook
+    app.kubernetes.io/component: webhook-service
+    app.kubernetes.io/part-of: k8s-resource-optimization
+    service-type: headless
+  annotations:
+    argocd.argoproj.io/sync-wave: "2"
+spec:
+  type: ClusterIP
+  clusterIP: None
+  selector:
+    app.kubernetes.io/name: slack-webhook
+    app.kubernetes.io/component: webhook-service
+  ports:
+    - name: http
+      port: 80
+      targetPort: http
+      protocol: TCP
+    - name: webhook
+      port: 8443
+      targetPort: webhook
+      protocol: TCP
+    - name: metrics
+      port: 9090
+      targetPort: metrics
+      protocol: TCP
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: slack-webhook-ingress
+  namespace: kube-green-system
+  labels:
+    app.kubernetes.io/name: slack-webhook
+    app.kubernetes.io/component: ingress
+    app.kubernetes.io/part-of: k8s-resource-optimization
+  annotations:
+    argocd.argoproj.io/sync-wave: "3"
+    kubernetes.io/ingress.class: "nginx"
+    nginx.ingress.kubernetes.io/ssl-redirect: "true"
+    nginx.ingress.kubernetes.io/force-ssl-redirect: "true"
+    nginx.ingress.kubernetes.io/backend-protocol: "HTTP"
+    nginx.ingress.kubernetes.io/proxy-connect-timeout: "600"
+    nginx.ingress.kubernetes.io/proxy-send-timeout: "600"
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "600"
+    nginx.ingress.kubernetes.io/proxy-body-size: "1m"
+    nginx.ingress.kubernetes.io/rate-limit: "100"
+    nginx.ingress.kubernetes.io/rate-limit-window: "1m"
+    cert-manager.io/cluster-issuer: "letsencrypt-prod"
+    external-dns.alpha.kubernetes.io/hostname: "k8s-optimization-webhook.example.com"
+spec:
+  tls:
+    - hosts:
+        - k8s-optimization-webhook.example.com
+      secretName: slack-webhook-tls-cert
+  rules:
+    - host: k8s-optimization-webhook.example.com
+      http:
+        paths:
+          - path: /webhook
+            pathType: Prefix
+            backend:
+              service:
+                name: slack-webhook-service
+                port:
+                  number: 8443
+          - path: /health
+            pathType: Exact
+            backend:
+              service:
+                name: slack-webhook-service
+                port:
+                  number: 80
+          - path: /ready
+            pathType: Exact
+            backend:
+              service:
+                name: slack-webhook-service
+                port:
+                  number: 80
+          - path: /metrics
+            pathType: Exact
+            backend:
+              service:
+                name: slack-webhook-service
+                port:
+                  number: 9090
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: slack-webhook-network-policy
+  namespace: kube-green-system
+  labels:
+    app.kubernetes.io/name: slack-webhook
+    app.kubernetes.io/component: network-policy
+    app.kubernetes.io/part-of: k8s-resource-optimization
+  annotations:
+    argocd.argoproj.io/sync-wave: "1"
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: slack-webhook
+  policyTypes:
+    - Ingress
+    - Egress
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              name: ingress-nginx
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/name: ingress-nginx
+      ports:
+        - protocol: TCP
+          port: 8080
+        - protocol: TCP
+          port: 8443
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              name: monitoring
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/name: prometheus
+      ports:
+        - protocol: TCP
+          port: 9090
+  egress:
+    # Allow DNS resolution
+    - to: []
+      ports:
+        - protocol: UDP
+          port: 53
+        - protocol: TCP
+          port: 53
+    # Allow HTTPS outbound for Slack API
+    - to: []
+      ports:
+        - protocol: TCP
+          port: 443
+    # Allow HTTP for internal services
+    - to:
+        - namespaceSelector: {}
+      ports:
+        - protocol: TCP
+          port: 80
+        - protocol: TCP
+          port: 8080
+    # Allow GitLab API access
+    - to: []
+      ports:
+        - protocol: TCP
+          port: 443
+    # Allow ArgoCD API access
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              name: argocd
+      ports:
+        - protocol: TCP
+          port: 443
+        - protocol: TCP
+          port: 80

@@ -1,0 +1,126 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+metadata:
+  name: kube-green-production
+
+# Base configuration
+resources:
+  - ../../base
+  - production-specific-sleepinfos.yaml
+  - production-monitoring.yaml
+  - production-backup-policies.yaml
+
+# Production-specific labels
+commonLabels:
+  environment: production
+  app.kubernetes.io/instance: kube-green-production
+  criticality: high
+
+# Production-specific annotations
+commonAnnotations:
+  environment: production
+  deployment.version: v1.0.0
+  cost-optimization.enabled: "true"
+  backup.enabled: "true"
+  monitoring.level: "comprehensive"
+
+# Namespace override for production
+namespace: kube-green-system
+
+# Production-specific image tags (use stable versions)
+images:
+  - name: kubegreen/kube-green
+    newTag: v0.5.1
+
+# Production-specific configuration patches
+patchesStrategicMerge:
+  - production-deployment-patch.yaml
+  - production-security-patch.yaml
+  - production-config-patch.yaml
+
+# JSON patches for production-specific modifications
+patchesJson6902:
+  - target:
+      version: v1
+      kind: Deployment
+      name: kube-green-controller-manager
+    path: production-deployment-patches.yaml
+
+# Production-specific ConfigMap generators
+configMapGenerator:
+  - name: kube-green-production-config
+    literals:
+      - ENVIRONMENT=production
+      - LOG_LEVEL=warn # Less verbose logging for production
+      - ENABLE_WEBHOOKS=true
+      - METRICS_ADDR=:8080
+      - HEALTH_PROBE_ADDR=:8081
+      - SLACK_CHANNEL=#k8s-optimization-prod
+      - COST_TRACKING_ENABLED=true
+      - MANUAL_OVERRIDE_ENABLED=true
+      - NOTIFICATION_LEVEL=critical
+      - BACKUP_BEFORE_SLEEP=true
+      - SAFETY_CHECKS_ENABLED=true
+      - DRY_RUN_MODE=false
+    files:
+      - production-schedule.yaml
+      - production-policies.json
+      - production-safety-rules.yaml
+
+# Production-specific Secret generators
+secretGenerator:
+  - name: kube-green-production-secrets
+    env: production.env
+    type: Opaque
+  - name: kube-green-backup-secrets
+    env: backup-credentials.env
+    type: Opaque
+
+# Resource name prefixes for production
+namePrefix: prod-
+
+# Resource name suffixes
+nameSuffix: -v1
+
+# Production-specific replica counts (higher for reliability)
+replicas:
+  - name: kube-green-controller-manager
+    count: 3
+
+# Production-specific resource requirements and limits
+replacements:
+  - source:
+      kind: ConfigMap
+      name: kube-green-production-config
+      fieldPath: data.ENVIRONMENT
+    targets:
+      - select:
+          kind: Deployment
+          name: kube-green-controller-manager
+        fieldPaths:
+          - spec.template.spec.containers.[name=manager].env.[name=ENVIRONMENT].value
+  - source:
+      kind: ConfigMap
+      name: kube-green-production-config
+      fieldPath: data.SLACK_CHANNEL
+    targets:
+      - select:
+          kind: SleepInfo
+        fieldPaths:
+          - metadata.annotations.[kube-green.dev/slack-channel]
+  - source:
+      kind: ConfigMap
+      name: kube-green-production-config
+      fieldPath: data.BACKUP_BEFORE_SLEEP
+    targets:
+      - select:
+          kind: SleepInfo
+        fieldPaths:
+          - metadata.annotations.[kube-green.dev/backup-before-sleep]
+
+# Production-specific generators for additional resources
+generators:
+  - production-network-policies.yaml
+  - production-pod-security-policies.yaml
+  - production-service-monitors.yaml

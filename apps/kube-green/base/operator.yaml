@@ -1,0 +1,179 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: kube-green-controller-manager
+  namespace: kube-green-system
+  labels:
+    app.kubernetes.io/name: kube-green
+    app.kubernetes.io/component: controller-manager
+    app.kubernetes.io/part-of: k8s-resource-optimization
+    control-plane: controller-manager
+  annotations:
+    argocd.argoproj.io/sync-wave: "1"
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      control-plane: controller-manager
+      app.kubernetes.io/name: kube-green
+  template:
+    metadata:
+      labels:
+        control-plane: controller-manager
+        app.kubernetes.io/name: kube-green
+        app.kubernetes.io/component: controller-manager
+      annotations:
+        kubectl.kubernetes.io/default-container: manager
+    spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 65532
+        runAsGroup: 65532
+        fsGroup: 65532
+        seccompProfile:
+          type: RuntimeDefault
+      serviceAccountName: kube-green-controller-manager
+      terminationGracePeriodSeconds: 30
+      containers:
+        - name: manager
+          image: kubegreen/kube-green:v0.5.1
+          imagePullPolicy: IfNotPresent
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+                - "ALL"
+            readOnlyRootFilesystem: true
+          command:
+            - /manager
+          args:
+            - --leader-elect
+            - --health-probe-bind-address=:8081
+            - --metrics-bind-address=:8080
+            - --webhook-port=9443
+          env:
+            - name: LOG_LEVEL
+              valueFrom:
+                configMapKeyRef:
+                  name: kube-green-config
+                  key: LOG_LEVEL
+            - name: ENABLE_WEBHOOKS
+              valueFrom:
+                configMapKeyRef:
+                  name: kube-green-config
+                  key: ENABLE_WEBHOOKS
+            - name: WEBHOOK_URL
+              value: "https://slack-webhook-service.kube-green-system.svc.cluster.local:8443/webhook"
+            - name: SLACK_CHANNEL
+              value: "#k8s-optimization"
+          ports:
+            - containerPort: 8080
+              name: metrics
+              protocol: TCP
+            - containerPort: 8081
+              name: health
+              protocol: TCP
+            - containerPort: 9443
+              name: webhook-server
+              protocol: TCP
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: health
+              scheme: HTTP
+            initialDelaySeconds: 15
+            periodSeconds: 20
+            timeoutSeconds: 1
+            failureThreshold: 3
+          readinessProbe:
+            httpGet:
+              path: /readyz
+              port: health
+              scheme: HTTP
+            initialDelaySeconds: 5
+            periodSeconds: 10
+            timeoutSeconds: 1
+            failureThreshold: 3
+          resources:
+            limits:
+              cpu: 500m
+              memory: 256Mi
+            requests:
+              cpu: 100m
+              memory: 128Mi
+          volumeMounts:
+            - name: webhook-certs
+              mountPath: /tmp/k8s-webhook-server/serving-certs
+              readOnly: true
+            - name: tmp
+              mountPath: /tmp
+      volumes:
+        - name: webhook-certs
+          secret:
+            secretName: kube-green-webhook-certs
+            defaultMode: 420
+        - name: tmp
+          emptyDir: {}
+      affinity:
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - weight: 100
+              podAffinityTerm:
+                labelSelector:
+                  matchLabels:
+                    control-plane: controller-manager
+                topologyKey: kubernetes.io/hostname
+      tolerations:
+        - key: node-role.kubernetes.io/control-plane
+          operator: Exists
+          effect: NoSchedule
+        - key: node-role.kubernetes.io/master
+          operator: Exists
+          effect: NoSchedule
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: kube-green-controller-manager-metrics-service
+  namespace: kube-green-system
+  labels:
+    app.kubernetes.io/name: kube-green
+    app.kubernetes.io/component: controller-manager
+    control-plane: controller-manager
+  annotations:
+    argocd.argoproj.io/sync-wave: "1"
+spec:
+  type: ClusterIP
+  selector:
+    control-plane: controller-manager
+    app.kubernetes.io/name: kube-green
+  ports:
+    - name: metrics
+      port: 8080
+      protocol: TCP
+      targetPort: metrics
+    - name: health
+      port: 8081
+      protocol: TCP
+      targetPort: health
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: kube-green-webhook-service
+  namespace: kube-green-system
+  labels:
+    app.kubernetes.io/name: kube-green
+    app.kubernetes.io/component: webhook
+  annotations:
+    argocd.argoproj.io/sync-wave: "1"
+spec:
+  type: ClusterIP
+  selector:
+    control-plane: controller-manager
+    app.kubernetes.io/name: kube-green
+  ports:
+    - name: webhook-server
+      port: 443
+      protocol: TCP
+      targetPort: webhook-server

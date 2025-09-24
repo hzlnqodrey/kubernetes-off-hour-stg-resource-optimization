@@ -1,0 +1,290 @@
+# GitLab CI/CD Pipeline for Kubernetes Resource Optimization POC
+# This pipeline handles testing, building, and deployment of all components
+
+stages:
+  - validate
+  - test
+  - build
+  - deploy-staging
+  - deploy-production
+
+variables:
+  DOCKER_DRIVER: overlay2
+  DOCKER_TLS_CERTDIR: "/certs"
+  REGISTRY: $CI_REGISTRY
+  IMAGE_TAG: $CI_COMMIT_SHA
+  KUBECONFIG_FILE: $KUBECONFIG
+  HELM_EXPERIMENTAL_OCI: 1
+
+# Global before_script for all jobs
+before_script:
+  - echo "Starting CI/CD pipeline for commit $CI_COMMIT_SHA"
+  - export PATH="$PATH:/usr/local/bin"
+
+# =====================================
+# VALIDATION STAGE
+# =====================================
+
+validate:yaml:
+  stage: validate
+  image: alpine:latest
+  before_script:
+    - apk add --no-cache yamllint
+  script:
+    - yamllint -c .yamllint.yml apps/
+    - yamllint -c .yamllint.yml charts/
+  rules:
+    - changes:
+        - "apps/**/*.yaml"
+        - "apps/**/*.yml"
+        - "charts/**/*.yaml"
+        - "charts/**/*.yml"
+
+validate:helm:
+  stage: validate
+  image: alpine/helm:latest
+  script:
+    - helm lint charts/kube-green-config/
+    - helm lint charts/slack-webhook/
+    - helm template charts/kube-green-config/ --values charts/kube-green-config/values.yaml
+    - helm template charts/slack-webhook/ --values charts/slack-webhook/values.yaml
+  rules:
+    - changes:
+        - "charts/**/*"
+
+validate:kustomize:
+  stage: validate
+  image: k8s.gcr.io/kustomize/kustomize:v4.5.7
+  script:
+    - kustomize build apps/kube-green/base/
+    - kustomize build apps/kube-green/overlays/staging/
+    - kustomize build apps/kube-green/overlays/production/
+  rules:
+    - changes:
+        - "apps/kube-green/**/*"
+
+validate:argocd:
+  stage: validate
+  image: argoproj/argocd:latest
+  script:
+    - argocd app validate apps/argocd/app-of-apps.yaml
+    - argocd app validate apps/argocd/projects/
+  rules:
+    - changes:
+        - "apps/argocd/**/*"
+
+# =====================================
+# TEST STAGE
+# =====================================
+
+test:integration:
+  stage: test
+  image: golang:1.21-alpine
+  services:
+    - name: kindest/node:v1.28.0
+      alias: kubernetes
+  before_script:
+    - apk add --no-cache docker-cli kubectl curl
+    - go mod download
+  script:
+    - ./scripts/test-integration.sh
+  artifacts:
+    reports:
+      junit: tests/integration/results.xml
+    paths:
+      - tests/integration/coverage.html
+    expire_in: 1 week
+  coverage: '/coverage: \d+\.\d+%/'
+  rules:
+    - changes:
+        - "tests/integration/**/*"
+        - "apps/**/*"
+        - "charts/**/*"
+
+test:e2e:
+  stage: test
+  image: golang:1.21-alpine
+  services:
+    - name: kindest/node:v1.28.0
+      alias: kubernetes
+  before_script:
+    - apk add --no-cache docker-cli kubectl curl
+  script:
+    - ./scripts/test-e2e.sh
+  artifacts:
+    reports:
+      junit: tests/e2e/results.xml
+    paths:
+      - tests/e2e/screenshots/
+    expire_in: 1 week
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+
+test:security:
+  stage: test
+  image: aquasec/trivy:latest
+  script:
+    - trivy fs --format table --exit-code 1 --severity HIGH,CRITICAL .
+    - trivy config --format table --exit-code 1 .
+  artifacts:
+    reports:
+      sast: trivy-results.json
+  allow_failure: true
+
+# =====================================
+# BUILD STAGE
+# =====================================
+
+build:slack-webhook:
+  stage: build
+  image: docker:latest
+  services:
+    - docker:dind
+  before_script:
+    - docker login -u $CI_REGISTRY_USER -p $CI_REGISTRY_PASSWORD $CI_REGISTRY
+  script:
+    - cd apps/slack-integration/
+    - docker build -t $REGISTRY/$CI_PROJECT_PATH/slack-webhook:$IMAGE_TAG .
+    - docker build -t $REGISTRY/$CI_PROJECT_PATH/slack-webhook:latest .
+    - docker push $REGISTRY/$CI_PROJECT_PATH/slack-webhook:$IMAGE_TAG
+    - docker push $REGISTRY/$CI_PROJECT_PATH/slack-webhook:latest
+  rules:
+    - changes:
+        - "apps/slack-integration/**/*"
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+
+build:helm-charts:
+  stage: build
+  image: alpine/helm:latest
+  before_script:
+    - helm registry login -u $CI_REGISTRY_USER -p $CI_REGISTRY_PASSWORD $CI_REGISTRY
+  script:
+    - helm package charts/kube-green-config/ --version $CI_COMMIT_SHORT_SHA
+    - helm package charts/slack-webhook/ --version $CI_COMMIT_SHORT_SHA
+    - helm push kube-green-config-$CI_COMMIT_SHORT_SHA.tgz oci://$CI_REGISTRY/$CI_PROJECT_PATH/charts
+    - helm push slack-webhook-$CI_COMMIT_SHORT_SHA.tgz oci://$CI_REGISTRY/$CI_PROJECT_PATH/charts
+  artifacts:
+    paths:
+      - "*.tgz"
+    expire_in: 1 week
+  rules:
+    - changes:
+        - "charts/**/*"
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+
+# =====================================
+# STAGING DEPLOYMENT
+# =====================================
+
+deploy:staging:
+  stage: deploy-staging
+  image: argoproj/argocd:latest
+  environment:
+    name: staging
+    url: https://argocd.staging.example.com
+  before_script:
+    - kubectl config use-context staging
+    - argocd login $ARGOCD_STAGING_SERVER --username $ARGOCD_USERNAME --password $ARGOCD_PASSWORD --insecure
+  script:
+    - argocd app sync k8s-optimization-staging --prune --force
+    - argocd app wait k8s-optimization-staging --timeout 600
+    - ./scripts/validate-deployment.sh staging
+  after_script:
+    - ./scripts/notify-slack.sh "staging" "deployed" "$CI_COMMIT_SHA"
+  rules:
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+      when: manual
+
+.deploy_template: &deploy_template
+  before_script:
+    - kubectl config use-context $ENVIRONMENT
+    - argocd login $ARGOCD_SERVER --username $ARGOCD_USERNAME --password $ARGOCD_PASSWORD --insecure
+  script:
+    - argocd app sync k8s-optimization-$ENVIRONMENT --prune --force
+    - argocd app wait k8s-optimization-$ENVIRONMENT --timeout 600
+    - ./scripts/validate-deployment.sh $ENVIRONMENT
+    - ./scripts/run-smoke-tests.sh $ENVIRONMENT
+  after_script:
+    - ./scripts/notify-slack.sh "$ENVIRONMENT" "deployed" "$CI_COMMIT_SHA"
+
+# =====================================
+# PRODUCTION DEPLOYMENT
+# =====================================
+
+deploy:production:
+  <<: *deploy_template
+  stage: deploy-production
+  image: argoproj/argocd:latest
+  environment:
+    name: production
+    url: https://argocd.production.example.com
+  variables:
+    ENVIRONMENT: production
+    ARGOCD_SERVER: $ARGOCD_PRODUCTION_SERVER
+  rules:
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+      when: manual
+  needs:
+    - deploy:staging
+
+# =====================================
+# MONITORING AND NOTIFICATIONS
+# =====================================
+
+notify:success:
+  stage: .post
+  image: alpine:latest
+  before_script:
+    - apk add --no-cache curl
+  script:
+    - ./scripts/notify-slack.sh "pipeline" "success" "$CI_COMMIT_SHA"
+  rules:
+    - if: $CI_PIPELINE_STATUS == "success"
+  when: on_success
+
+notify:failure:
+  stage: .post
+  image: alpine:latest
+  before_script:
+    - apk add --no-cache curl
+  script:
+    - ./scripts/notify-slack.sh "pipeline" "failed" "$CI_COMMIT_SHA"
+  rules:
+    - when: on_failure
+
+# =====================================
+# SCHEDULED JOBS
+# =====================================
+
+cleanup:docker-registry:
+  stage: deploy-production
+  image: alpine:latest
+  before_script:
+    - apk add --no-cache curl jq
+  script:
+    - ./scripts/cleanup-registry.sh
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "schedule"
+      variables:
+        SCHEDULE_TYPE: "cleanup"
+
+monitor:cost-optimization:
+  stage: deploy-production
+  image: alpine:latest
+  before_script:
+    - apk add --no-cache curl kubectl
+  script:
+    - ./scripts/generate-cost-report.sh
+    - ./scripts/notify-slack.sh "cost-report" "generated" "$(date)"
+  artifacts:
+    reports:
+      performance: cost-report.json
+    paths:
+      - cost-report.html
+    expire_in: 30 days
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "schedule"
+      variables:
+        SCHEDULE_TYPE: "cost-monitoring"
