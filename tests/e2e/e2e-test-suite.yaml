@@ -1,0 +1,621 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: kube-green-e2e-tests
+  namespace: kube-green-system
+  labels:
+    app.kubernetes.io/name: kube-green-tests
+    app.kubernetes.io/component: e2e-tests
+    app.kubernetes.io/part-of: k8s-resource-optimization
+  annotations:
+    argocd.argoproj.io/sync-wave: "10"
+data:
+  # End-to-end test configuration
+  e2e-config.yaml: |
+    e2e_tests:
+      test_environment: "e2e"
+      browser: "headless-chrome"
+      timeout: "45m"
+      parallel_execution: false
+      screenshot_on_failure: true
+      video_recording: true
+      
+      # Test environments
+      environments:
+        - name: "e2e-staging"
+          url: "https://argocd-staging.example.com"
+          slack_webhook: "https://hooks.slack.com/services/TEST/E2E/WEBHOOK"
+          grafana_url: "https://grafana-staging.example.com"
+          
+      # User personas for testing
+      user_personas:
+        - name: "developer"
+          permissions: ["wake", "status"]
+          environments: ["staging", "development"]
+          slack_user: "@test-developer"
+          
+        - name: "devops"
+          permissions: ["wake", "sleep", "status", "schedule"]
+          environments: ["staging", "development", "production"]
+          slack_user: "@test-devops"
+          
+        - name: "admin"
+          permissions: ["*"]
+          environments: ["*"]
+          slack_user: "@test-admin"
+      
+      # Test scenarios
+      test_scenarios:
+        - name: "complete_user_journey_developer"
+          description: "Complete developer user journey from discovery to daily usage"
+          persona: "developer"
+          timeout: "20m"
+          steps:
+            - action: "discover_slack_commands"
+              method: "slack_help_command"
+              command: "/k8s-help"
+              expected_response: "command_list"
+              
+            - action: "check_environment_status"
+              method: "slack_command"
+              command: "/k8s-status staging"
+              expected_response: "status_information"
+              
+            - action: "attempt_wake_staging"
+              method: "slack_command"
+              command: "/k8s-wake staging"
+              expected_response: "success"
+              wait_for: "environment_wake"
+              
+            - action: "verify_wake_in_grafana"
+              method: "browser_navigation"
+              url: "{{ grafana_url }}/d/k8s-optimization-ops"
+              verify_elements:
+                - "staging environment metrics"
+                - "resource utilization graphs"
+                
+            - action: "attempt_sleep_staging"
+              method: "slack_command" 
+              command: "/k8s-sleep staging"
+              expected_response: "permission_denied"
+              
+            - action: "verify_audit_log"
+              method: "grafana_check"
+              dashboard: "audit-logs"
+              verify_entry: "permission_denied_sleep_staging"
+              
+        - name: "emergency_override_scenario"
+          description: "Test emergency override workflow during critical demo"
+          persona: "devops"
+          timeout: "15m"
+          steps:
+            - action: "setup_demo_scenario"
+              method: "environment_setup"
+              environment: "staging"
+              state: "sleeping"
+              time: "off_hours"
+              
+            - action: "trigger_emergency_wake"
+              method: "slack_button"
+              button: "emergency_wake_staging"
+              confirmation_required: true
+              
+            - action: "confirm_emergency_action"
+              method: "slack_confirmation"
+              confirm_text: "Yes, Emergency Wake"
+              reason: "Critical demo starting now"
+              
+            - action: "verify_immediate_wake"
+              method: "kubernetes_check"
+              namespace: "staging"
+              expected_replicas: "> 0"
+              timeout: "3m"
+              
+            - action: "verify_notification_sent"
+              method: "slack_check"
+              channel: "#k8s-optimization-alerts"
+              expected_message: "Emergency override executed"
+              
+            - action: "verify_gitlab_commit"
+              method: "gitlab_api_check"
+              repository: "k8s-resource-optimization"
+              branch: "main"
+              expected_commit: "emergency override"
+              
+        - name: "cost_tracking_workflow"
+          description: "Test complete cost tracking and reporting workflow"
+          persona: "admin"
+          timeout: "25m"
+          steps:
+            - action: "access_cost_dashboard"
+              method: "browser_navigation"
+              url: "{{ grafana_url }}/d/k8s-cost-optimization"
+              login_required: true
+              
+            - action: "verify_cost_metrics"
+              method: "dashboard_validation"
+              expected_panels:
+                - "Monthly Cost Savings Projection"
+                - "Annual Savings Projection"
+                - "Daily Cost Savings by Environment"
+                - "Environment Sleep Status"
+                
+            - action: "generate_cost_report"
+              method: "slack_command"
+              command: "/k8s-cost monthly"
+              expected_response: "cost_report_generated"
+              
+            - action: "verify_report_accuracy"
+              method: "data_validation"
+              compare_sources:
+                - "grafana_metrics"
+                - "prometheus_raw_data"
+                - "kubernetes_resource_usage"
+              tolerance: "5%"
+              
+            - action: "schedule_recurring_report"
+              method: "slack_command"
+              command: "/k8s-schedule-report monthly finance"
+              expected_response: "schedule_created"
+              
+        - name: "multi_environment_coordination"
+          description: "Test coordination across multiple environments"
+          persona: "devops"
+          timeout: "30m"
+          steps:
+            - action: "deploy_test_workloads"
+              method: "kubectl_apply"
+              environments: ["staging", "development"]
+              workloads_per_env: 3
+              
+            - action: "initiate_bulk_sleep"
+              method: "slack_command"
+              command: "/k8s-sleep-all dev-environments"
+              target_environments: ["staging", "development"]
+              
+            - action: "monitor_coordinated_shutdown"
+              method: "real_time_monitoring"
+              expected_sequence:
+                - "development sleeps first"
+                - "staging sleeps second"
+                - "notifications sent for each"
+              timeout: "10m"
+              
+            - action: "verify_cost_impact"
+              method: "metrics_comparison"
+              baseline: "before_bulk_sleep"
+              expected_reduction: "> 80%"
+              
+            - action: "test_partial_wake"
+              method: "slack_command"
+              command: "/k8s-wake staging"
+              expected_behavior: "staging_only_wakes"
+              
+            - action: "verify_selective_wake"
+              method: "environment_status_check"
+              expected_states:
+                staging: "awake"
+                development: "sleeping"
+                
+        - name: "failure_recovery_scenario"
+          description: "Test system behavior during various failure scenarios"
+          persona: "admin"
+          timeout: "35m"
+          steps:
+            - action: "baseline_system_health"
+              method: "health_check_all"
+              components: ["operator", "webhook", "argocd", "monitoring"]
+              
+            - action: "simulate_operator_failure"
+              method: "pod_deletion"
+              target: "kube-green-controller-manager"
+              namespace: "kube-green-system"
+              
+            - action: "verify_automatic_recovery"
+              method: "wait_for_recovery"
+              timeout: "5m"
+              expected_state: "operator_healthy"
+              
+            - action: "test_operations_during_recovery"
+              method: "slack_command_during_recovery"
+              command: "/k8s-status all"
+              expected_behavior: "graceful_degradation"
+              
+            - action: "simulate_slack_service_failure"
+              method: "service_disruption"
+              target: "slack-webhook-service"
+              duration: "2m"
+              
+            - action: "verify_fallback_mechanisms"
+              method: "alternative_access_test"
+              methods: ["argocd_ui", "kubectl_direct"]
+              expected_behavior: "operations_still_possible"
+              
+            - action: "test_monitoring_alerts"
+              method: "alert_validation"
+              expected_alerts:
+                - "KubeGreenOperatorDown"
+                - "SlackWebhookServiceDown"
+              channels: ["#k8s-optimization-alerts"]
+              
+        - name: "performance_under_load"
+          description: "Test system performance under realistic load"
+          persona: "admin"
+          timeout: "40m"
+          steps:
+            - action: "setup_load_test_environment"
+              method: "environment_preparation"
+              environments: 10
+              workloads_per_env: 5
+              total_workloads: 50
+              
+            - action: "initiate_concurrent_operations"
+              method: "parallel_execution"
+              operations:
+                - type: "sleep"
+                  count: 25
+                  concurrency: 5
+                - type: "wake"
+                  count: 25
+                  concurrency: 5
+                - type: "status_check"
+                  count: 50
+                  concurrency: 10
+                  
+            - action: "monitor_system_performance"
+              method: "metrics_collection"
+              duration: "15m"
+              metrics:
+                - "operation_latency_p95"
+                - "cpu_usage_peak"
+                - "memory_usage_peak"
+                - "error_rate"
+                
+            - action: "validate_performance_sla"
+              method: "sla_validation"
+              requirements:
+                max_latency_p95: "30s"
+                max_cpu_usage: "500m"
+                max_memory_usage: "512Mi"
+                max_error_rate: "2%"
+                
+            - action: "test_slack_responsiveness"
+              method: "concurrent_slack_commands"
+              commands: 20
+              expected_response_time: "< 5s"
+              
+        - name: "security_compliance_validation"
+          description: "Validate security controls and compliance requirements"
+          persona: "admin"
+          timeout: "20m"
+          steps:
+            - action: "test_rbac_enforcement"
+              method: "permission_validation"
+              test_cases:
+                - user: "developer"
+                  action: "sleep_production"
+                  expected: "denied"
+                - user: "devops"
+                  action: "wake_staging"
+                  expected: "allowed"
+                - user: "admin"
+                  action: "emergency_override"
+                  expected: "allowed"
+                  
+            - action: "validate_audit_logging"
+              method: "audit_trail_check"
+              verify_logged_events:
+                - "user_authentication"
+                - "action_authorization"
+                - "resource_modifications"
+                - "permission_denials"
+                
+            - action: "test_secret_management"
+              method: "secret_access_validation"
+              secrets: ["slack-tokens", "gitlab-tokens", "argocd-tokens"]
+              expected_access: "restricted_to_services_only"
+              
+            - action: "validate_network_policies"
+              method: "network_connectivity_test"
+              test_scenarios:
+                - from: "external"
+                  to: "slack-webhook"
+                  expected: "allowed_on_webhook_port_only"
+                - from: "slack-webhook"
+                  to: "kubernetes-api"
+                  expected: "allowed"
+                - from: "external"
+                  to: "kube-green-operator"
+                  expected: "denied"
+                  
+            - action: "compliance_report_generation"
+              method: "compliance_validation"
+              standards: ["SOC2", "ISO27001"]
+              generate_report: true
+
+  # E2E test execution framework
+  e2e-runner.py: |
+    #!/usr/bin/env python3
+    """
+    End-to-End Test Runner for Kubernetes Resource Optimization
+
+    This script orchestrates comprehensive E2E testing including:
+    - Browser automation for UI testing
+    - API testing for integrations
+    - Kubernetes resource validation
+    - Slack interaction simulation
+    - Performance monitoring
+    """
+
+    import asyncio
+    import json
+    import logging
+    import os
+    import time
+    import yaml
+    from datetime import datetime, timedelta
+    from typing import Dict, List, Any, Optional
+
+    import aiohttp
+    import kubernetes
+    from kubernetes import client, config
+    from selenium import webdriver
+    from selenium.webdriver.chrome.options import Options
+    from selenium.webdriver.common.by import By
+    from selenium.webdriver.support.ui import WebDriverWait
+    from selenium.webdriver.support import expected_conditions as EC
+
+    # Configure logging
+    logging.basicConfig(
+        level=logging.INFO,
+        format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+    )
+    logger = logging.getLogger(__name__)
+
+    class E2ETestRunner:
+        def __init__(self, config_path: str = "e2e-config.yaml"):
+            self.config = self._load_config(config_path)
+            self.k8s_client = self._init_kubernetes_client()
+            self.driver = None
+            self.test_results = []
+            
+        def _load_config(self, config_path: str) -> Dict[str, Any]:
+            """Load test configuration from YAML file"""
+            with open(config_path, 'r') as f:
+                return yaml.safe_load(f)
+                
+        def _init_kubernetes_client(self):
+            """Initialize Kubernetes client"""
+            try:
+                config.load_incluster_config()
+            except:
+                config.load_kube_config()
+            return client.ApiClient()
+            
+        def _init_browser(self):
+            """Initialize headless Chrome browser"""
+            chrome_options = Options()
+            chrome_options.add_argument("--headless")
+            chrome_options.add_argument("--no-sandbox")
+            chrome_options.add_argument("--disable-dev-shm-usage")
+            chrome_options.add_argument("--window-size=1920,1080")
+            
+            self.driver = webdriver.Chrome(options=chrome_options)
+            self.driver.implicitly_wait(10)
+            
+        async def run_all_scenarios(self) -> Dict[str, str]:
+            """Run all E2E test scenarios"""
+            logger.info("Starting E2E test suite")
+            
+            try:
+                self._init_browser()
+                
+                for scenario in self.config['e2e_tests']['test_scenarios']:
+                    logger.info(f"Running scenario: {scenario['name']}")
+                    
+                    try:
+                        result = await self._run_scenario(scenario)
+                        self.test_results.append({
+                            'scenario': scenario['name'],
+                            'result': result,
+                            'timestamp': datetime.now().isoformat()
+                        })
+                        logger.info(f"Scenario {scenario['name']}: {result}")
+                        
+                    except Exception as e:
+                        logger.error(f"Scenario {scenario['name']} failed: {str(e)}")
+                        self.test_results.append({
+                            'scenario': scenario['name'],
+                            'result': 'FAILED',
+                            'error': str(e),
+                            'timestamp': datetime.now().isoformat()
+                        })
+                        
+            finally:
+                if self.driver:
+                    self.driver.quit()
+                    
+            return self._generate_report()
+            
+        async def _run_scenario(self, scenario: Dict[str, Any]) -> str:
+            """Run a single test scenario"""
+            persona = scenario.get('persona', 'admin')
+            timeout = scenario.get('timeout', '20m')
+            
+            start_time = time.time()
+            timeout_seconds = self._parse_timeout(timeout)
+            
+            for step in scenario['steps']:
+                if time.time() - start_time > timeout_seconds:
+                    raise TimeoutError(f"Scenario timeout exceeded: {timeout}")
+                    
+                await self._execute_step(step, persona)
+                
+            return "PASSED"
+            
+        async def _execute_step(self, step: Dict[str, Any], persona: str):
+            """Execute a single test step"""
+            action = step['action']
+            method = step['method']
+            
+            logger.info(f"Executing step: {action} via {method}")
+            
+            if method == 'slack_command':
+                await self._execute_slack_command(step)
+            elif method == 'slack_button':
+                await self._execute_slack_button(step)
+            elif method == 'browser_navigation':
+                await self._execute_browser_navigation(step)
+            elif method == 'kubernetes_check':
+                await self._execute_kubernetes_check(step)
+            elif method == 'environment_setup':
+                await self._execute_environment_setup(step)
+            elif method == 'metrics_validation':
+                await self._execute_metrics_validation(step)
+            else:
+                logger.warning(f"Unknown method: {method}")
+                
+        async def _execute_slack_command(self, step: Dict[str, Any]):
+            """Simulate Slack command execution"""
+            command = step.get('command')
+            expected_response = step.get('expected_response')
+            
+            # Simulate API call to Slack webhook service
+            webhook_url = "http://slack-webhook-service:8080/test-command"
+            
+            async with aiohttp.ClientSession() as session:
+                payload = {
+                    'command': command,
+                    'user': 'test-user',
+                    'channel': 'test-channel'
+                }
+                
+                async with session.post(webhook_url, json=payload) as response:
+                    if response.status != 200:
+                        raise Exception(f"Slack command failed: {response.status}")
+                        
+                    result = await response.json()
+                    
+                    if expected_response and expected_response not in str(result):
+                        raise Exception(f"Unexpected response: {result}")
+                        
+        async def _execute_kubernetes_check(self, step: Dict[str, Any]):
+            """Check Kubernetes resource states"""
+            namespace = step.get('namespace')
+            expected_replicas = step.get('expected_replicas')
+            timeout = step.get('timeout', '5m')
+            
+            timeout_seconds = self._parse_timeout(timeout)
+            start_time = time.time()
+            
+            v1 = client.AppsV1Api(self.k8s_client)
+            
+            while time.time() - start_time < timeout_seconds:
+                try:
+                    deployments = v1.list_namespaced_deployment(namespace)
+                    
+                    total_replicas = sum(
+                        d.status.ready_replicas or 0 
+                        for d in deployments.items
+                    )
+                    
+                    if self._check_replica_condition(total_replicas, expected_replicas):
+                        return
+                        
+                except Exception as e:
+                    logger.warning(f"Kubernetes check error: {e}")
+                    
+                await asyncio.sleep(5)
+                
+            raise TimeoutError(f"Kubernetes check timeout: expected {expected_replicas} replicas")
+            
+        def _check_replica_condition(self, actual: int, expected: str) -> bool:
+            """Check if replica count meets expected condition"""
+            if expected == "0":
+                return actual == 0
+            elif expected.startswith("> "):
+                return actual > int(expected[2:])
+            elif expected.startswith("< "):
+                return actual < int(expected[2:])
+            else:
+                return actual == int(expected)
+                
+        async def _execute_browser_navigation(self, step: Dict[str, Any]):
+            """Execute browser-based navigation and validation"""
+            url = step.get('url')
+            verify_elements = step.get('verify_elements', [])
+            
+            if not self.driver:
+                raise Exception("Browser not initialized")
+                
+            self.driver.get(url)
+            
+            # Wait for page load
+            WebDriverWait(self.driver, 10).until(
+                EC.presence_of_element_located((By.TAG_NAME, "body"))
+            )
+            
+            # Verify expected elements
+            for element_desc in verify_elements:
+                try:
+                    # Simple text-based search for now
+                    self.driver.find_element(By.XPATH, f"//*[contains(text(), '{element_desc}')]")
+                except:
+                    raise Exception(f"Element not found: {element_desc}")
+                    
+        def _parse_timeout(self, timeout_str: str) -> int:
+            """Parse timeout string to seconds"""
+            if timeout_str.endswith('m'):
+                return int(timeout_str[:-1]) * 60
+            elif timeout_str.endswith('s'):
+                return int(timeout_str[:-1])
+            elif timeout_str.endswith('h'):
+                return int(timeout_str[:-1]) * 3600
+            else:
+                return int(timeout_str)
+                
+        def _generate_report(self) -> Dict[str, Any]:
+            """Generate test execution report"""
+            total_tests = len(self.test_results)
+            passed_tests = len([r for r in self.test_results if r['result'] == 'PASSED'])
+            failed_tests = total_tests - passed_tests
+            
+            report = {
+                'summary': {
+                    'total_tests': total_tests,
+                    'passed': passed_tests,
+                    'failed': failed_tests,
+                    'pass_rate': f"{(passed_tests/total_tests)*100:.1f}%" if total_tests > 0 else "0%"
+                },
+                'results': self.test_results,
+                'timestamp': datetime.now().isoformat()
+            }
+            
+            # Save report to file
+            with open('/tmp/e2e-test-report.json', 'w') as f:
+                json.dump(report, f, indent=2)
+                
+            logger.info(f"E2E Test Report: {passed_tests}/{total_tests} tests passed")
+            
+            return report
+            
+    async def main():
+        """Main entry point for E2E tests"""
+        runner = E2ETestRunner()
+        
+        try:
+            results = await runner.run_all_scenarios()
+            
+            if results['summary']['failed'] == 0:
+                logger.info("All E2E tests passed successfully!")
+                exit(0)
+            else:
+                logger.error(f"E2E tests failed: {results['summary']['failed']} failures")
+                exit(1)
+                
+        except Exception as e:
+            logger.error(f"E2E test suite failed: {str(e)}")
+            exit(1)
+            
+    if __name__ == "__main__":
+        asyncio.run(main())

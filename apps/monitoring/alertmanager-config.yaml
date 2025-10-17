@@ -1,0 +1,418 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: alertmanager-k8s-optimization-config
+  namespace: monitoring
+  labels:
+    app.kubernetes.io/name: alertmanager
+    app.kubernetes.io/component: config
+    app.kubernetes.io/part-of: k8s-resource-optimization
+  annotations:
+    argocd.argoproj.io/sync-wave: "2"
+data:
+  alertmanager.yml: |
+    global:
+      smtp_smarthost: 'localhost:587'
+      smtp_from: 'k8s-optimization-alerts@company.com'
+      smtp_auth_username: 'k8s-optimization-alerts@company.com'
+      smtp_auth_password: 'password_placeholder'
+      slack_api_url: 'https://hooks.slack.com/services/YOUR/SLACK/WEBHOOK'
+      
+    templates:
+    - '/etc/alertmanager/templates/*.tmpl'
+
+    route:
+      group_by: ['alertname', 'cluster', 'service']
+      group_wait: 10s
+      group_interval: 10s
+      repeat_interval: 1h
+      receiver: 'web.hook'
+      routes:
+      # Critical alerts for immediate attention
+      - match:
+          severity: critical
+        receiver: 'critical-alerts'
+        group_wait: 0s
+        group_interval: 5m
+        repeat_interval: 30m
+        routes:
+        # kube-green operator critical issues
+        - match:
+            service: kube-green
+        receiver: 'kube-green-critical'
+        # Slack integration critical issues  
+        - match:
+            service: slack-integration
+        receiver: 'slack-integration-critical'
+        
+      # Warning alerts for monitoring
+      - match:
+          severity: warning
+        receiver: 'warning-alerts'
+        group_wait: 30s
+        group_interval: 5m
+        repeat_interval: 2h
+        routes:
+        # Cost optimization warnings
+        - match:
+            service: cost-optimization
+        receiver: 'cost-optimization-alerts'
+        # Business impact warnings
+        - match:
+            alertname: CostSavingsDeclined
+        receiver: 'business-impact-alerts'
+        - match:
+            alertname: ManualOverrideFrequencyHigh
+        receiver: 'operational-alerts'
+        
+      # Info alerts for FYI
+      - match:
+          severity: info
+        receiver: 'info-alerts'
+        group_wait: 5m
+        group_interval: 10m
+        repeat_interval: 12h
+
+    inhibit_rules:
+    # Inhibit warning alerts when critical alerts are firing
+    - source_match:
+        severity: 'critical'
+      target_match:
+        severity: 'warning'
+      equal: ['alertname', 'cluster', 'service']
+      
+    # Inhibit manual override alerts when operator is down
+    - source_match:
+        alertname: 'KubeGreenOperatorDown'
+      target_match:
+        alertname: 'ManualOverrideFrequencyHigh'
+      equal: ['cluster']
+
+    receivers:
+    # Default webhook receiver
+    - name: 'web.hook'
+      webhook_configs:
+      - url: 'http://slack-webhook-service:8080/alerts'
+        send_resolved: true
+        http_config:
+          basic_auth:
+            username: 'alertmanager'
+            password: 'webhook_auth_token'
+        title: 'K8s Resource Optimization Alert'
+        text: 'Alert: {{ .GroupLabels.alertname }}'
+        
+    # Critical alerts - immediate notification
+    - name: 'critical-alerts'
+      slack_configs:
+      - api_url: 'https://hooks.slack.com/services/YOUR/CRITICAL/WEBHOOK'
+        channel: '#k8s-optimization-alerts'
+        color: 'danger'
+        title: '🚨 CRITICAL: {{ .GroupLabels.alertname }}'
+        text: >-
+          {{ range .Alerts }}
+          *Alert:* {{ .Annotations.summary }}
+          *Description:* {{ .Annotations.description }}
+          *Severity:* {{ .Labels.severity }}
+          *Service:* {{ .Labels.service }}
+          {{ end }}
+        actions:
+        - type: button
+          text: 'View in Grafana'
+          url: 'https://grafana.company.com/d/k8s-optimization-ops'
+        - type: button
+          text: 'Emergency Runbook'
+          url: 'https://wiki.company.com/k8s-optimization/emergency'
+      email_configs:
+      - to: 'devops-oncall@company.com'
+        from: 'k8s-optimization-alerts@company.com'
+        subject: 'CRITICAL: K8s Resource Optimization Alert'
+        html: |
+          <h2>🚨 Critical Alert: {{ .GroupLabels.alertname }}</h2>
+          {{ range .Alerts }}
+          <p><strong>Summary:</strong> {{ .Annotations.summary }}</p>
+          <p><strong>Description:</strong> {{ .Annotations.description }}</p>
+          <p><strong>Severity:</strong> {{ .Labels.severity }}</p>
+          <p><strong>Service:</strong> {{ .Labels.service }}</p>
+          <p><strong>Time:</strong> {{ .StartsAt }}</p>
+          {{ end }}
+          
+    # kube-green specific critical alerts
+    - name: 'kube-green-critical'
+      slack_configs:
+      - api_url: 'https://hooks.slack.com/services/YOUR/SLACK/WEBHOOK'
+        channel: '#k8s-optimization-alerts'
+        color: 'danger'
+        title: '🚨 kube-green Operator Critical Issue'
+        text: >-
+          The kube-green operator is experiencing critical issues.
+          
+          {{ range .Alerts }}
+          *Alert:* {{ .Annotations.summary }}
+          *Description:* {{ .Annotations.description }}
+          *Started:* {{ .StartsAt }}
+          {{ end }}
+          
+          **Immediate Actions Required:**
+          1. Check operator logs: `kubectl logs -n kube-green-system deployment/kube-green-controller-manager`
+          2. Verify operator status: `kubectl get pods -n kube-green-system`
+          3. Review recent changes in GitLab
+          4. Escalate to Platform Engineering if unresolved in 15 minutes
+        actions:
+        - type: button
+          text: 'Check Operator Logs'
+          url: 'https://grafana.company.com/explore?queries=[{"expr":"kube_green_.*","refId":"A"}]'
+        - type: button
+          text: 'Emergency Restart'
+          url: 'https://argocd.company.com/applications/kube-green-operator'
+      pagerduty_configs:
+      - routing_key: 'your-pagerduty-integration-key'
+        description: 'kube-green operator critical failure'
+        severity: 'critical'
+        
+    # Slack integration critical alerts
+    - name: 'slack-integration-critical'
+      slack_configs:
+      - api_url: 'https://hooks.slack.com/services/YOUR/SLACK/WEBHOOK'
+        channel: '#k8s-optimization-alerts'
+        color: 'danger'
+        title: '🚨 Slack Integration Service Down'
+        text: >-
+          The Slack webhook service is down - manual overrides unavailable.
+          
+          {{ range .Alerts }}
+          *Alert:* {{ .Annotations.summary }}
+          *Description:* {{ .Annotations.description }}
+          *Started:* {{ .StartsAt }}
+          {{ end }}
+          
+          **Impact:**
+          - Manual sleep/wake commands unavailable
+          - Emergency overrides not possible via Slack
+          - Notifications may be delayed
+          
+          **Immediate Actions:**
+          1. Check service status: `kubectl get pods -n kube-green-system -l app=slack-webhook`
+          2. Review service logs: `kubectl logs -n kube-green-system deployment/slack-webhook-service`
+          3. Verify Slack token validity
+          4. Use ArgoCD/kubectl for emergency operations
+        actions:
+        - type: button
+          text: 'Service Logs'
+          url: 'https://grafana.company.com/explore?queries=[{"expr":"slack_webhook_.*","refId":"A"}]'
+        - type: button
+          text: 'ArgoCD Emergency Access'
+          url: 'https://argocd.company.com/applications'
+          
+    # Warning level alerts
+    - name: 'warning-alerts'
+      slack_configs:
+      - api_url: 'https://hooks.slack.com/services/YOUR/SLACK/WEBHOOK'
+        channel: '#k8s-optimization'
+        color: 'warning'
+        title: '⚠️ Warning: {{ .GroupLabels.alertname }}'
+        text: >-
+          {{ range .Alerts }}
+          *Alert:* {{ .Annotations.summary }}
+          *Description:* {{ .Annotations.description }}
+          *Severity:* {{ .Labels.severity }}
+          {{ end }}
+        actions:
+        - type: button
+          text: 'View Details'
+          url: 'https://grafana.company.com/d/k8s-optimization-ops'
+          
+    # Cost optimization specific alerts
+    - name: 'cost-optimization-alerts'
+      slack_configs:
+      - api_url: 'https://hooks.slack.com/services/YOUR/SLACK/WEBHOOK'
+        channel: '#k8s-optimization'
+        color: 'warning'
+        title: '💰 Cost Optimization Alert'
+        text: >-
+          {{ range .Alerts }}
+          *Alert:* {{ .Annotations.summary }}
+          *Description:* {{ .Annotations.description }}
+          {{ end }}
+          
+          **Recommended Actions:**
+          1. Review cost dashboard for trends
+          2. Check for unusual manual override patterns
+          3. Verify sleep schedules are appropriate
+          4. Consider adjusting optimization policies
+        actions:
+        - type: button
+          text: 'Cost Dashboard'
+          url: 'https://grafana.company.com/d/k8s-cost-optimization'
+        - type: button
+          text: 'Review Schedules'
+          url: 'https://gitlab.com/your-org/k8s-resource-optimization/-/tree/main/apps/kube-green'
+      email_configs:
+      - to: 'finance@company.com,devops@company.com'
+        from: 'k8s-optimization-alerts@company.com'
+        subject: 'Cost Optimization Alert: {{ .GroupLabels.alertname }}'
+        
+    # Business impact alerts
+    - name: 'business-impact-alerts'
+      slack_configs:
+      - api_url: 'https://hooks.slack.com/services/YOUR/SLACK/WEBHOOK'
+        channel: '#k8s-optimization'
+        color: 'warning'
+        title: '📊 Business Impact Alert'
+        text: >-
+          {{ range .Alerts }}
+          *Alert:* {{ .Annotations.summary }}
+          *Description:* {{ .Annotations.description }}
+          {{ end }}
+          
+          This alert indicates potential impact to business KPIs.
+          Please review the cost optimization effectiveness.
+        actions:
+        - type: button
+          text: 'Business Dashboard'
+          url: 'https://grafana.company.com/d/k8s-cost-optimization'
+      email_configs:
+      - to: 'engineering-leadership@company.com'
+        from: 'k8s-optimization-alerts@company.com'
+        subject: 'Business Impact: {{ .GroupLabels.alertname }}'
+        
+    # Operational alerts
+    - name: 'operational-alerts'
+      slack_configs:
+      - api_url: 'https://hooks.slack.com/services/YOUR/SLACK/WEBHOOK'
+        channel: '#k8s-optimization'
+        color: 'warning'
+        title: '🔧 Operational Alert'
+        text: >-
+          {{ range .Alerts }}
+          *Alert:* {{ .Annotations.summary }}
+          *Description:* {{ .Annotations.description }}
+          {{ end }}
+          
+          **Possible Causes:**
+          - Unusual development activity requiring frequent overrides
+          - Sleep schedules not aligned with team working hours
+          - System issues causing failed automatic operations
+          - Training needed for proper system usage
+        actions:
+        - type: button
+          text: 'Operations Dashboard'
+          url: 'https://grafana.company.com/d/k8s-optimization-ops'
+        - type: button
+          text: 'User Guide'
+          url: 'https://wiki.company.com/k8s-optimization/user-guide'
+          
+    # Info level alerts
+    - name: 'info-alerts'
+      slack_configs:
+      - api_url: 'https://hooks.slack.com/services/YOUR/SLACK/WEBHOOK'
+        channel: '#k8s-optimization'
+        color: 'good'
+        title: 'ℹ️ Info: {{ .GroupLabels.alertname }}'
+        text: >-
+          {{ range .Alerts }}
+          *{{ .Annotations.summary }}*
+          {{ .Annotations.description }}
+          {{ end }}
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: alertmanager-templates
+  namespace: monitoring
+  labels:
+    app.kubernetes.io/name: alertmanager
+    app.kubernetes.io/component: templates
+    app.kubernetes.io/part-of: k8s-resource-optimization
+  annotations:
+    argocd.argoproj.io/sync-wave: "1"
+data:
+  # Custom alert templates
+  k8s-optimization.tmpl: |
+    {{ define "__subject" }}
+    [{{ .Status | toUpper }}{{ if eq .Status "firing" }}:{{ .Alerts.Firing | len }}{{ end }}] 
+    K8s Resource Optimization: {{ .GroupLabels.alertname }}
+    {{ end }}
+
+    {{ define "__description" }}
+    {{ range .Alerts }}
+    {{ if .Annotations.summary }}{{ .Annotations.summary }}{{ end }}
+    {{ if .Annotations.description }}{{ .Annotations.description }}{{ end }}
+    {{ end }}
+    {{ end }}
+
+    {{ define "__text_alert_list" }}
+    {{ range .Alerts }}
+    Labels:
+    {{ range .Labels.SortedPairs }} - {{ .Name }} = {{ .Value }}
+    {{ end }}
+    Annotations:
+    {{ range .Annotations.SortedPairs }} - {{ .Name }} = {{ .Value }}
+    {{ end }}
+    {{ if .GeneratorURL }}Source: {{ .GeneratorURL }}{{ end }}
+    {{ end }}
+    {{ end }}
+
+    {{ define "slack.default.title" }}
+    {{ template "__subject" . }}
+    {{ end }}
+
+    {{ define "slack.default.text" }}
+    {{ if .CommonAnnotations.summary }}{{ .CommonAnnotations.summary }}{{ end }}
+    {{ if .CommonAnnotations.description }}{{ .CommonAnnotations.description }}{{ end }}
+
+    {{ if gt (len .Alerts.Firing) 0 }}
+    **Firing:**
+    {{ template "__text_alert_list" .Alerts.Firing }}
+    {{ end }}
+
+    {{ if gt (len .Alerts.Resolved) 0 }}
+    **Resolved:**
+    {{ template "__text_alert_list" .Alerts.Resolved }}
+    {{ end }}
+    {{ end }}
+
+    {{ define "email.default.subject" }}
+    {{ template "__subject" . }}
+    {{ end }}
+
+    {{ define "email.default.html" }}
+    <!DOCTYPE html>
+    <html>
+    <head>
+    <style>
+    body { font-family: Arial, sans-serif; }
+    .alert { margin: 10px 0; padding: 10px; border-left: 4px solid; }
+    .firing { border-color: #d32f2f; background-color: #ffebee; }
+    .resolved { border-color: #388e3c; background-color: #e8f5e8; }
+    .warning { border-color: #f57c00; background-color: #fff3e0; }
+    </style>
+    </head>
+    <body>
+    <h2>K8s Resource Optimization Alert</h2>
+
+    {{ if gt (len .Alerts.Firing) 0 }}
+    <h3>🚨 Firing Alerts</h3>
+    {{ range .Alerts.Firing }}
+    <div class="alert firing">
+    <strong>{{ .Annotations.summary }}</strong><br>
+    {{ .Annotations.description }}<br>
+    <small>Started: {{ .StartsAt }}</small>
+    </div>
+    {{ end }}
+    {{ end }}
+
+    {{ if gt (len .Alerts.Resolved) 0 }}
+    <h3>✅ Resolved Alerts</h3>
+    {{ range .Alerts.Resolved }}
+    <div class="alert resolved">
+    <strong>{{ .Annotations.summary }}</strong><br>
+    {{ .Annotations.description }}<br>
+    <small>Resolved: {{ .EndsAt }}</small>
+    </div>
+    {{ end }}
+    {{ end }}
+
+    <p><a href="https://grafana.company.com/d/k8s-optimization-ops">View Operations Dashboard</a></p>
+    </body>
+    </html>
+    {{ end }}

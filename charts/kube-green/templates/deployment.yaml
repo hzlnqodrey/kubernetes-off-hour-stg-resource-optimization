@@ -1,0 +1,126 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "kube-green.fullname" . }}-controller-manager
+  namespace: {{ include "kube-green.namespace" . }}
+  labels:
+    {{- include "kube-green.labels" . | nindent 4 }}
+    app.kubernetes.io/component: manager
+    control-plane: controller-manager
+  {{- with (include "kube-green.annotations" .) }}
+  annotations:
+    {{- . | nindent 4 }}
+  {{- end }}
+spec:
+  replicas: {{ .Values.replicaCount }}
+  selector:
+    matchLabels:
+      {{- include "kube-green.selectorLabels" . | nindent 6 }}
+      control-plane: controller-manager
+  template:
+    metadata:
+      labels:
+        {{- include "kube-green.selectorLabels" . | nindent 8 }}
+        control-plane: controller-manager
+      annotations:
+        kubectl.kubernetes.io/default-container: manager
+        {{- with .Values.podAnnotations }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+    spec:
+      {{- include "kube-green.imagePullSecrets" . | nindent 6 }}
+      serviceAccountName: {{ include "kube-green.serviceAccountName" . }}
+      securityContext:
+        {{- toYaml .Values.podSecurityContext | nindent 8 }}
+      terminationGracePeriodSeconds: 10
+      containers:
+      - name: manager
+        image: {{ include "kube-green.image" . }}
+        imagePullPolicy: {{ .Values.image.pullPolicy }}
+        securityContext:
+          {{- toYaml .Values.securityContext | nindent 10 }}
+        args:
+          {{- toYaml .Values.manager.args | nindent 10 }}
+          {{- with .Values.manager.extraArgs }}
+          {{- toYaml . | nindent 10 }}
+          {{- end }}
+        env:
+        - name: LOG_LEVEL
+          value: {{ .Values.env.logLevel | quote }}
+        - name: ENABLE_WEBHOOKS
+          value: {{ .Values.env.enableWebhooks | quote }}
+        - name: METRICS_ADDR
+          value: {{ .Values.env.metricsAddr | quote }}
+        - name: HEALTH_PROBE_ADDR
+          value: {{ .Values.env.healthProbeAddr | quote }}
+        {{- with .Values.manager.env }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+        {{- with .Values.env.extra }}
+        {{- range $key, $value := . }}
+        - name: {{ $key }}
+          value: {{ $value | quote }}
+        {{- end }}
+        {{- end }}
+        ports:
+        - name: webhook-server
+          containerPort: {{ .Values.webhook.port }}
+          protocol: TCP
+        - name: metrics
+          containerPort: {{ .Values.metrics.port }}
+          protocol: TCP
+        - name: health
+          containerPort: 8081
+          protocol: TCP
+        {{- if .Values.livenessProbe }}
+        livenessProbe:
+          {{- toYaml .Values.livenessProbe | nindent 10 }}
+        {{- end }}
+        {{- if .Values.readinessProbe }}
+        readinessProbe:
+          {{- toYaml .Values.readinessProbe | nindent 10 }}
+        {{- end }}
+        resources:
+          {{- toYaml .Values.resources | nindent 10 }}
+        volumeMounts:
+        {{- if .Values.webhook.enabled }}
+        - mountPath: {{ .Values.webhook.certDir }}
+          name: cert
+          readOnly: true
+        {{- end }}
+        - mountPath: /tmp
+          name: tmp
+        {{- with .Values.volumeMounts }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+      {{- with .Values.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.topologySpreadConstraints }}
+      topologySpreadConstraints:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.priorityClassName }}
+      priorityClassName: {{ . }}
+      {{- end }}
+      volumes:
+      {{- if .Values.webhook.enabled }}
+      - name: cert
+        secret:
+          defaultMode: 420
+          secretName: {{ include "kube-green.certificateName" . }}
+      {{- end }}
+      - name: tmp
+        emptyDir: {}
+      {{- with .Values.volumes }}
+      {{- toYaml . | nindent 6 }}
+      {{- end }}

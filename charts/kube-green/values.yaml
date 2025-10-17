@@ -1,0 +1,294 @@
+# Default values for kube-green.
+# This is a YAML-formatted file.
+# Declare variables to be substituted into your templates.
+
+# Image configuration
+image:
+  repository: kubegreen/kube-green
+  tag: "v0.5.1"
+  pullPolicy: IfNotPresent
+
+# Image pull secrets
+imagePullSecrets: []
+
+# Override the name of the chart
+nameOverride: ""
+fullnameOverride: ""
+
+# Deployment configuration
+replicaCount: 1
+
+# Service account configuration
+serviceAccount:
+  # Specifies whether a service account should be created
+  create: true
+  # Annotations to add to the service account
+  annotations: {}
+  # The name of the service account to use.
+  # If not set and create is true, a name is generated using the fullname template
+  name: ""
+
+# Pod annotations
+podAnnotations: {}
+
+# Pod security context
+podSecurityContext:
+  runAsNonRoot: true
+  runAsUser: 65532
+  runAsGroup: 65532
+  fsGroup: 65532
+  seccompProfile:
+    type: RuntimeDefault
+
+# Container security context
+securityContext:
+  allowPrivilegeEscalation: false
+  capabilities:
+    drop:
+      - ALL
+  readOnlyRootFilesystem: true
+  runAsNonRoot: true
+  runAsUser: 65532
+
+# Service configuration
+service:
+  type: ClusterIP
+  port: 8080
+  portName: metrics
+
+# Webhook service configuration
+webhookService:
+  type: ClusterIP
+  port: 443
+  portName: webhook-server
+
+# Resource limits and requests
+resources:
+  limits:
+    cpu: 500m
+    memory: 512Mi
+  requests:
+    cpu: 100m
+    memory: 128Mi
+
+# Liveness probe configuration
+livenessProbe:
+  httpGet:
+    path: /healthz
+    port: 8081
+    scheme: HTTP
+  initialDelaySeconds: 15
+  periodSeconds: 20
+  timeoutSeconds: 1
+  failureThreshold: 3
+
+# Readiness probe configuration
+readinessProbe:
+  httpGet:
+    path: /readyz
+    port: 8081
+    scheme: HTTP
+  initialDelaySeconds: 5
+  periodSeconds: 10
+  timeoutSeconds: 1
+  failureThreshold: 3
+
+# Node selector
+nodeSelector: {}
+
+# Tolerations
+tolerations:
+  - key: node-role.kubernetes.io/control-plane
+    operator: Exists
+    effect: NoSchedule
+  - key: node-role.kubernetes.io/master
+    operator: Exists
+    effect: NoSchedule
+
+# Affinity
+affinity:
+  podAntiAffinity:
+    preferredDuringSchedulingIgnoredDuringExecution:
+      - weight: 100
+        podAffinityTerm:
+          labelSelector:
+            matchLabels:
+              app.kubernetes.io/name: kube-green
+          topologyKey: kubernetes.io/hostname
+
+# Topology spread constraints
+topologySpreadConstraints: []
+
+# Leader election configuration
+leaderElection:
+  enabled: true
+
+# Webhook configuration
+webhook:
+  enabled: true
+  port: 9443
+  certDir: /tmp/k8s-webhook-server/serving-certs
+
+  # Certificate management
+  certificate:
+    # Use cert-manager for certificate generation
+    create: true
+    # Certificate annotations (for cert-manager)
+    annotations:
+      cert-manager.io/cluster-issuer: "selfsigned-issuer"
+
+# Metrics configuration
+metrics:
+  enabled: true
+  port: 8080
+  path: /metrics
+
+  # ServiceMonitor for Prometheus Operator
+  serviceMonitor:
+    enabled: false
+    namespace: ""
+    labels: {}
+    annotations: {}
+    interval: 30s
+    path: /metrics
+    port: metrics
+    scheme: http
+    scrapeTimeout: 10s
+
+  # PrometheusRule for alerting
+  prometheusRule:
+    enabled: false
+    namespace: ""
+    labels: {}
+    annotations: {}
+    rules: []
+
+# RBAC configuration
+rbac:
+  # Create RBAC resources
+  create: true
+
+  # Additional rules for the ClusterRole
+  additionalRules: []
+
+# Priority class
+priorityClassName: ""
+
+# Pod disruption budget
+podDisruptionBudget:
+  enabled: false
+  minAvailable: 1
+  # maxUnavailable: 1
+
+# Environment variables
+env:
+  # Log level (debug, info, warn, error)
+  logLevel: info
+
+  # Enable/disable webhooks
+  enableWebhooks: true
+
+  # Metrics bind address
+  metricsAddr: ":8080"
+
+  # Health probe bind address
+  healthProbeAddr: ":8081"
+
+  # Additional environment variables
+  extra: {}
+
+# Volume mounts and volumes
+volumes: []
+volumeMounts: []
+
+# CRD management
+crds:
+  # Keep CRDs when uninstalling the chart
+  keep: true
+
+# Global settings
+global:
+  # Image registry override
+  imageRegistry: ""
+
+  # Image pull secrets
+  imagePullSecrets: []
+
+  # Storage class
+  storageClass: ""
+
+# Additional labels to apply to all resources
+commonLabels: {}
+
+# Additional annotations to apply to all resources
+commonAnnotations: {}
+
+# Network policies
+networkPolicy:
+  enabled: false
+
+  # Ingress rules
+  ingress: []
+
+  # Egress rules
+  egress:
+    - to: []
+      ports:
+        - protocol: TCP
+          port: 53
+        - protocol: UDP
+          port: 53
+    - to: []
+      ports:
+        - protocol: TCP
+          port: 443
+    - to: []
+      ports:
+        - protocol: TCP
+          port: 6443
+
+# Pod monitor configuration (for VictoriaMetrics)
+podMonitor:
+  enabled: false
+  namespace: ""
+  labels: {}
+  annotations: {}
+  interval: 30s
+  path: /metrics
+  port: metrics
+  scheme: http
+  scrapeTimeout: 10s
+
+# Configuration for the manager
+manager:
+  # Manager specific configuration
+  args:
+    - --leader-elect
+    - --health-probe-bind-address=:8081
+    - --metrics-bind-address=:8080
+    - --webhook-port=9443
+
+  # Additional args
+  extraArgs: []
+
+  # Manager specific environment variables
+  env: []
+
+# Namespace configuration
+namespaceOverride: ""
+
+# Test configuration
+tests:
+  enabled: true
+  image:
+    repository: busybox
+    tag: latest
+    pullPolicy: IfNotPresent
+
+# Upgrade configuration
+upgrade:
+  # Force upgrade
+  force: false
+
+  # Cleanup on failure
+  cleanupOnFail: true

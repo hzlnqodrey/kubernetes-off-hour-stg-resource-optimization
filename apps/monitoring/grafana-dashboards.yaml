@@ -1,0 +1,710 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: k8s-optimization-dashboards
+  namespace: monitoring
+  labels:
+    app.kubernetes.io/name: grafana
+    app.kubernetes.io/component: dashboards
+    app.kubernetes.io/part-of: k8s-resource-optimization
+    grafana_dashboard: "1"
+  annotations:
+    argocd.argoproj.io/sync-wave: "3"
+data:
+  # Cost Optimization Dashboard
+  cost-optimization-dashboard.json: |
+    {
+      "dashboard": {
+        "id": null,
+        "title": "Kubernetes Resource Optimization - Cost Tracking",
+        "tags": ["kubernetes", "cost-optimization", "kube-green"],
+        "style": "dark",
+        "timezone": "browser",
+        "panels": [
+          {
+            "id": 1,
+            "title": "Monthly Cost Savings Projection",
+            "type": "stat",
+            "targets": [
+              {
+                "expr": "kube_green:monthly_savings_projection_dollars",
+                "legendFormat": "Monthly Savings ($)"
+              }
+            ],
+            "fieldConfig": {
+              "defaults": {
+                "color": {
+                  "mode": "palette-classic"
+                },
+                "custom": {
+                  "displayMode": "lcd",
+                  "orientation": "horizontal"
+                },
+                "mappings": [],
+                "thresholds": {
+                  "steps": [
+                    {
+                      "color": "red",
+                      "value": null
+                    },
+                    {
+                      "color": "yellow",
+                      "value": 5000
+                    },
+                    {
+                      "color": "green",
+                      "value": 10000
+                    }
+                  ]
+                },
+                "unit": "currencyUSD"
+              }
+            },
+            "gridPos": {
+              "h": 8,
+              "w": 12,
+              "x": 0,
+              "y": 0
+            }
+          },
+          {
+            "id": 2,
+            "title": "Annual Savings Projection",
+            "type": "stat",
+            "targets": [
+              {
+                "expr": "kube_green:annual_savings_projection_dollars",
+                "legendFormat": "Annual Savings ($)"
+              }
+            ],
+            "fieldConfig": {
+              "defaults": {
+                "color": {
+                  "mode": "palette-classic"
+                },
+                "custom": {
+                  "displayMode": "lcd",
+                  "orientation": "horizontal"
+                },
+                "thresholds": {
+                  "steps": [
+                    {
+                      "color": "red",
+                      "value": null
+                    },
+                    {
+                      "color": "yellow",
+                      "value": 60000
+                    },
+                    {
+                      "color": "green",
+                      "value": 120000
+                    }
+                  ]
+                },
+                "unit": "currencyUSD"
+              }
+            },
+            "gridPos": {
+              "h": 8,
+              "w": 12,
+              "x": 12,
+              "y": 0
+            }
+          },
+          {
+            "id": 3,
+            "title": "Daily Cost Savings by Environment",
+            "type": "timeseries",
+            "targets": [
+              {
+                "expr": "kube_green:daily_savings_estimate_dollars",
+                "legendFormat": "{{ environment }}"
+              }
+            ],
+            "fieldConfig": {
+              "defaults": {
+                "color": {
+                  "mode": "palette-classic"
+                },
+                "custom": {
+                  "axisLabel": "",
+                  "axisPlacement": "auto",
+                  "barAlignment": 0,
+                  "drawStyle": "line",
+                  "fillOpacity": 10,
+                  "gradientMode": "none",
+                  "hideFrom": {
+                    "legend": false,
+                    "tooltip": false,
+                    "vis": false
+                  },
+                  "lineInterpolation": "linear",
+                  "lineWidth": 1,
+                  "pointSize": 5,
+                  "scaleDistribution": {
+                    "type": "linear"
+                  },
+                  "showPoints": "never",
+                  "spanNulls": false,
+                  "stacking": {
+                    "group": "A",
+                    "mode": "none"
+                  },
+                  "thresholdsStyle": {
+                    "mode": "off"
+                  }
+                },
+                "unit": "currencyUSD"
+              }
+            },
+            "gridPos": {
+              "h": 8,
+              "w": 24,
+              "x": 0,
+              "y": 8
+            }
+          },
+          {
+            "id": 4,
+            "title": "Environment Sleep Status",
+            "type": "timeseries",
+            "targets": [
+              {
+                "expr": "kube_green:environment_sleep_state",
+                "legendFormat": "{{ environment }} Sleep %"
+              }
+            ],
+            "fieldConfig": {
+              "defaults": {
+                "color": {
+                  "mode": "palette-classic"
+                },
+                "custom": {
+                  "axisLabel": "",
+                  "axisPlacement": "auto",
+                  "barAlignment": 0,
+                  "drawStyle": "line",
+                  "fillOpacity": 20,
+                  "gradientMode": "none",
+                  "hideFrom": {
+                    "legend": false,
+                    "tooltip": false,
+                    "vis": false
+                  },
+                  "lineInterpolation": "linear",
+                  "lineWidth": 2,
+                  "pointSize": 5,
+                  "scaleDistribution": {
+                    "type": "linear"
+                  },
+                  "showPoints": "never",
+                  "spanNulls": false,
+                  "stacking": {
+                    "group": "A",
+                    "mode": "none"
+                  },
+                  "thresholdsStyle": {
+                    "mode": "off"
+                  }
+                },
+                "max": 100,
+                "min": 0,
+                "unit": "percent"
+              }
+            },
+            "gridPos": {
+              "h": 8,
+              "w": 24,
+              "x": 0,
+              "y": 16
+            }
+          }
+        ],
+        "refresh": "30s",
+        "schemaVersion": 27,
+        "style": "dark",
+        "tags": [
+          "kubernetes",
+          "cost-optimization"
+        ],
+        "templating": {
+          "list": [
+            {
+              "allValue": null,
+              "current": {
+                "selected": false,
+                "text": "All",
+                "value": "$__all"
+              },
+              "hide": 0,
+              "includeAll": true,
+              "label": "Environment",
+              "multi": true,
+              "name": "environment",
+              "options": [],
+              "query": "label_values(kube_green:environment_sleep_state, environment)",
+              "refresh": 1,
+              "regex": "",
+              "skipUrlSync": false,
+              "sort": 0,
+              "tagValuesQuery": "",
+              "tagsQuery": "",
+              "type": "query",
+              "useTags": false
+            }
+          ]
+        },
+        "time": {
+          "from": "now-24h",
+          "to": "now"
+        },
+        "timepicker": {},
+        "timezone": "",
+        "title": "Kubernetes Resource Optimization - Cost Tracking",
+        "uid": "k8s-cost-optimization",
+        "version": 1
+      }
+    }
+
+  # Operational Dashboard
+  operational-dashboard.json: |
+    {
+      "dashboard": {
+        "id": null,
+        "title": "Kubernetes Resource Optimization - Operations",
+        "tags": ["kubernetes", "operations", "kube-green"],
+        "style": "dark",
+        "timezone": "browser",
+        "panels": [
+          {
+            "id": 1,
+            "title": "System Availability",
+            "type": "stat",
+            "targets": [
+              {
+                "expr": "kube_green:system_availability_percentage",
+                "legendFormat": "System Availability"
+              }
+            ],
+            "fieldConfig": {
+              "defaults": {
+                "color": {
+                  "mode": "thresholds"
+                },
+                "custom": {
+                  "displayMode": "lcd",
+                  "orientation": "horizontal"
+                },
+                "thresholds": {
+                  "steps": [
+                    {
+                      "color": "red",
+                      "value": null
+                    },
+                    {
+                      "color": "yellow",
+                      "value": 95
+                    },
+                    {
+                      "color": "green",
+                      "value": 99
+                    }
+                  ]
+                },
+                "unit": "percent",
+                "max": 100,
+                "min": 0
+              }
+            },
+            "gridPos": {
+              "h": 8,
+              "w": 6,
+              "x": 0,
+              "y": 0
+            }
+          },
+          {
+            "id": 2,
+            "title": "Sleep Operation Success Rate",
+            "type": "stat",
+            "targets": [
+              {
+                "expr": "kube_green:sleep_operation_success_rate",
+                "legendFormat": "Sleep Success Rate"
+              }
+            ],
+            "fieldConfig": {
+              "defaults": {
+                "color": {
+                  "mode": "thresholds"
+                },
+                "thresholds": {
+                  "steps": [
+                    {
+                      "color": "red",
+                      "value": null
+                    },
+                    {
+                      "color": "yellow",
+                      "value": 90
+                    },
+                    {
+                      "color": "green",
+                      "value": 95
+                    }
+                  ]
+                },
+                "unit": "percent",
+                "max": 100,
+                "min": 0
+              }
+            },
+            "gridPos": {
+              "h": 8,
+              "w": 6,
+              "x": 6,
+              "y": 0
+            }
+          },
+          {
+            "id": 3,
+            "title": "Wake Operation Success Rate",
+            "type": "stat",
+            "targets": [
+              {
+                "expr": "kube_green:wake_operation_success_rate",
+                "legendFormat": "Wake Success Rate"
+              }
+            ],
+            "fieldConfig": {
+              "defaults": {
+                "color": {
+                  "mode": "thresholds"
+                },
+                "thresholds": {
+                  "steps": [
+                    {
+                      "color": "red",
+                      "value": null
+                    },
+                    {
+                      "color": "yellow",
+                      "value": 90
+                    },
+                    {
+                      "color": "green",
+                      "value": 95
+                    }
+                  ]
+                },
+                "unit": "percent",
+                "max": 100,
+                "min": 0
+              }
+            },
+            "gridPos": {
+              "h": 8,
+              "w": 6,
+              "x": 12,
+              "y": 0
+            }
+          },
+          {
+            "id": 4,
+            "title": "Manual Override Frequency",
+            "type": "stat",
+            "targets": [
+              {
+                "expr": "kube_green:manual_override_frequency",
+                "legendFormat": "Overrides/Hour"
+              }
+            ],
+            "fieldConfig": {
+              "defaults": {
+                "color": {
+                  "mode": "thresholds"
+                },
+                "thresholds": {
+                  "steps": [
+                    {
+                      "color": "green",
+                      "value": null
+                    },
+                    {
+                      "color": "yellow",
+                      "value": 5
+                    },
+                    {
+                      "color": "red",
+                      "value": 10
+                    }
+                  ]
+                },
+                "unit": "short"
+              }
+            },
+            "gridPos": {
+              "h": 8,
+              "w": 6,
+              "x": 18,
+              "y": 0
+            }
+          },
+          {
+            "id": 5,
+            "title": "Sleep/Wake Operations Over Time",
+            "type": "timeseries",
+            "targets": [
+              {
+                "expr": "rate(kube_green_sleep_operations_total[5m]) * 60",
+                "legendFormat": "Sleep Operations/min"
+              },
+              {
+                "expr": "rate(kube_green_wake_operations_total[5m]) * 60",
+                "legendFormat": "Wake Operations/min"
+              }
+            ],
+            "fieldConfig": {
+              "defaults": {
+                "color": {
+                  "mode": "palette-classic"
+                },
+                "unit": "short"
+              }
+            },
+            "gridPos": {
+              "h": 8,
+              "w": 12,
+              "x": 0,
+              "y": 8
+            }
+          },
+          {
+            "id": 6,
+            "title": "Manual Override Types",
+            "type": "piechart",
+            "targets": [
+              {
+                "expr": "sum by (type) (slack_webhook_manual_overrides_total)",
+                "legendFormat": "{{ type }}"
+              }
+            ],
+            "fieldConfig": {
+              "defaults": {
+                "color": {
+                  "mode": "palette-classic"
+                },
+                "custom": {
+                  "hideFrom": {
+                    "legend": false,
+                    "tooltip": false,
+                    "vis": false
+                  }
+                },
+                "unit": "short"
+              }
+            },
+            "gridPos": {
+              "h": 8,
+              "w": 12,
+              "x": 12,
+              "y": 8
+            }
+          }
+        ],
+        "refresh": "30s",
+        "schemaVersion": 27,
+        "style": "dark",
+        "tags": [
+          "kubernetes",
+          "operations"
+        ],
+        "time": {
+          "from": "now-6h",
+          "to": "now"
+        },
+        "timepicker": {},
+        "timezone": "",
+        "title": "Kubernetes Resource Optimization - Operations",
+        "uid": "k8s-optimization-ops",
+        "version": 1
+      }
+    }
+
+  # Resource Utilization Dashboard
+  resource-utilization-dashboard.json: |
+    {
+      "dashboard": {
+        "id": null,
+        "title": "Kubernetes Resource Optimization - Resource Utilization",
+        "tags": ["kubernetes", "resources", "utilization"],
+        "style": "dark",
+        "timezone": "browser",
+        "panels": [
+          {
+            "id": 1,
+            "title": "CPU Utilization by Environment",
+            "type": "timeseries",
+            "targets": [
+              {
+                "expr": "sum by (namespace) (rate(container_cpu_usage_seconds_total{namespace=~\"staging|development|production\"}[5m])) * 100",
+                "legendFormat": "{{ namespace }} CPU %"
+              }
+            ],
+            "fieldConfig": {
+              "defaults": {
+                "color": {
+                  "mode": "palette-classic"
+                },
+                "unit": "percent"
+              }
+            },
+            "gridPos": {
+              "h": 8,
+              "w": 12,
+              "x": 0,
+              "y": 0
+            }
+          },
+          {
+            "id": 2,
+            "title": "Memory Utilization by Environment",
+            "type": "timeseries",
+            "targets": [
+              {
+                "expr": "sum by (namespace) (container_memory_working_set_bytes{namespace=~\"staging|development|production\"}) / 1024 / 1024 / 1024",
+                "legendFormat": "{{ namespace }} Memory GB"
+              }
+            ],
+            "fieldConfig": {
+              "defaults": {
+                "color": {
+                  "mode": "palette-classic"
+                },
+                "unit": "decbytes"
+              }
+            },
+            "gridPos": {
+              "h": 8,
+              "w": 12,
+              "x": 12,
+              "y": 0
+            }
+          },
+          {
+            "id": 3,
+            "title": "Pod Count by Environment",
+            "type": "timeseries",
+            "targets": [
+              {
+                "expr": "sum by (namespace) (kube_pod_info{namespace=~\"staging|development|production\"})",
+                "legendFormat": "{{ namespace }} Pods"
+              }
+            ],
+            "fieldConfig": {
+              "defaults": {
+                "color": {
+                  "mode": "palette-classic"
+                },
+                "unit": "short"
+              }
+            },
+            "gridPos": {
+              "h": 8,
+              "w": 12,
+              "x": 0,
+              "y": 8
+            }
+          },
+          {
+            "id": 4,
+            "title": "Deployment Replica Scaling",
+            "type": "timeseries",
+            "targets": [
+              {
+                "expr": "kube_deployment_status_replicas{namespace=~\"staging|development|production\"}",
+                "legendFormat": "{{ namespace }}/{{ deployment }} replicas"
+              }
+            ],
+            "fieldConfig": {
+              "defaults": {
+                "color": {
+                  "mode": "palette-classic"
+                },
+                "unit": "short"
+              }
+            },
+            "gridPos": {
+              "h": 8,
+              "w": 12,
+              "x": 12,
+              "y": 8
+            }
+          }
+        ],
+        "refresh": "30s",
+        "schemaVersion": 27,
+        "style": "dark",
+        "tags": [
+          "kubernetes",
+          "resources"
+        ],
+        "time": {
+          "from": "now-6h",
+          "to": "now"
+        },
+        "timepicker": {},
+        "timezone": "",
+        "title": "Kubernetes Resource Optimization - Resource Utilization",
+        "uid": "k8s-optimization-resources",
+        "version": 1
+      }
+    }
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: grafana-datasources
+  namespace: monitoring
+  labels:
+    app.kubernetes.io/name: grafana
+    app.kubernetes.io/component: datasource
+    app.kubernetes.io/part-of: k8s-resource-optimization
+    grafana_datasource: "1"
+  annotations:
+    argocd.argoproj.io/sync-wave: "2"
+data:
+  datasources.yaml: |
+    apiVersion: 1
+    datasources:
+    - name: Prometheus
+      type: prometheus
+      access: proxy
+      url: http://prometheus:9090
+      isDefault: true
+      editable: true
+      jsonData:
+        timeInterval: 30s
+        queryTimeout: 60s
+        httpMethod: POST
+        manageAlerts: true
+        prometheusType: Prometheus
+        prometheusVersion: 2.40.0
+        exemplarTraceIdDestinations:
+        - name: trace_id
+          datasourceUid: jaeger
+
+    - name: Alertmanager
+      type: alertmanager
+      access: proxy
+      url: http://alertmanager:9093
+      jsonData:
+        implementation: prometheus
+        
+    # Optional: Add Jaeger for distributed tracing
+    - name: Jaeger
+      type: jaeger
+      access: proxy
+      url: http://jaeger:16686
+      uid: jaeger

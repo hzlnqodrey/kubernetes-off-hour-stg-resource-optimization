@@ -1,0 +1,332 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: prometheus-k8s-optimization-config
+  namespace: monitoring
+  labels:
+    app.kubernetes.io/name: prometheus
+    app.kubernetes.io/component: config
+    app.kubernetes.io/part-of: k8s-resource-optimization
+  annotations:
+    argocd.argoproj.io/sync-wave: "1"
+data:
+  # Custom recording rules for cost optimization metrics
+  k8s-optimization-rules.yaml: |
+    groups:
+    - name: k8s-resource-optimization.rules
+      interval: 30s
+      rules:
+      # Resource scaling metrics
+      - record: kube_green:deployment_replicas_ratio
+        expr: |
+          (
+            kube_deployment_status_replicas{namespace=~"staging|development|production"} /
+            kube_deployment_spec_replicas{namespace=~"staging|development|production"}
+          ) * 100
+        labels:
+          environment: '{{ $labels.namespace }}'
+          
+      - record: kube_green:environment_sleep_state
+        expr: |
+          (
+            count by (namespace) (
+              kube_deployment_status_replicas{namespace=~"staging|development|production"} == 0
+            ) /
+            count by (namespace) (
+              kube_deployment_status_replicas{namespace=~"staging|development|production"}
+            )
+          ) * 100
+        labels:
+          environment: '{{ $labels.namespace }}'
+      
+      # Cost calculation metrics (estimated)
+      - record: kube_green:hourly_cost_estimate_dollars
+        expr: |
+          (
+            sum by (namespace) (
+              kube_pod_container_resource_requests{resource="cpu", namespace=~"staging|development|production"} * 0.048
+            ) +
+            sum by (namespace) (
+              kube_pod_container_resource_requests{resource="memory", namespace=~"staging|development|production"} / 1024 / 1024 / 1024 * 0.005
+            )
+          )
+        labels:
+          environment: '{{ $labels.namespace }}'
+          
+      - record: kube_green:daily_savings_estimate_dollars
+        expr: |
+          kube_green:hourly_cost_estimate_dollars * 
+          (kube_green:environment_sleep_state / 100) * 24
+        labels:
+          environment: '{{ $labels.namespace }}'
+          
+      # Operation success rates
+      - record: kube_green:sleep_operation_success_rate
+        expr: |
+          (
+            rate(kube_green_sleep_operations_total{status="success"}[5m]) /
+            rate(kube_green_sleep_operations_total[5m])
+          ) * 100
+          
+      - record: kube_green:wake_operation_success_rate
+        expr: |
+          (
+            rate(kube_green_wake_operations_total{status="success"}[5m]) /
+            rate(kube_green_wake_operations_total[5m])
+          ) * 100
+          
+      # Manual override frequency
+      - record: kube_green:manual_override_frequency
+        expr: |
+          rate(slack_webhook_manual_overrides_total[1h]) * 3600
+          
+    - name: k8s-optimization.alerts
+      rules:
+      # Critical alerts
+      - alert: KubeGreenOperatorDown
+        expr: up{job="kube-green-operator"} == 0
+        for: 5m
+        labels:
+          severity: critical
+          service: kube-green
+        annotations:
+          summary: "kube-green operator is down"
+          description: "The kube-green operator has been down for more than 5 minutes"
+          
+      - alert: SlackWebhookServiceDown
+        expr: up{job="slack-webhook-service"} == 0
+        for: 5m
+        labels:
+          severity: critical
+          service: slack-integration
+        annotations:
+          summary: "Slack webhook service is down"
+          description: "The Slack webhook service has been down for more than 5 minutes"
+          
+      - alert: SleepOperationFailureHigh
+        expr: kube_green:sleep_operation_success_rate < 90
+        for: 10m
+        labels:
+          severity: warning
+          service: kube-green
+        annotations:
+          summary: "High sleep operation failure rate"
+          description: "Sleep operation success rate is {{ $value }}% for the last 10 minutes"
+          
+      - alert: ManualOverrideFrequencyHigh
+        expr: kube_green:manual_override_frequency > 10
+        for: 30m
+        labels:
+          severity: warning
+          service: slack-integration
+        annotations:
+          summary: "High manual override frequency"
+          description: "Manual override frequency is {{ $value }} per hour"
+          
+      # Business impact alerts
+      - alert: CostSavingsDeclined
+        expr: |
+          (
+            avg_over_time(kube_green:daily_savings_estimate_dollars[7d]) -
+            avg_over_time(kube_green:daily_savings_estimate_dollars[1d])
+          ) / avg_over_time(kube_green:daily_savings_estimate_dollars[7d]) * 100 > 20
+        for: 1h
+        labels:
+          severity: warning
+          service: cost-optimization
+        annotations:
+          summary: "Cost savings have declined significantly"
+          description: "Daily cost savings have declined by more than 20% compared to the 7-day average"
+          
+      - alert: EnvironmentNotSleepingScheduled
+        expr: |
+          (
+            kube_green:environment_sleep_state < 50 and
+            hour() >= 20 or hour() <= 6
+          ) unless on() (
+            slack_webhook_manual_overrides_total > 0
+          )
+        for: 30m
+        labels:
+          severity: warning
+          service: kube-green
+        annotations:
+          summary: "Environment not sleeping during scheduled hours"
+          description: "{{ $labels.environment }} environment is not sleeping during scheduled off-hours"
+
+  # Custom scrape configurations
+  additional-scrape-configs.yaml: |
+    # kube-green operator metrics
+    - job_name: 'kube-green-operator'
+      kubernetes_sd_configs:
+      - role: endpoints
+        namespaces:
+          names:
+          - kube-green-system
+      relabel_configs:
+      - source_labels: [__meta_kubernetes_service_name]
+        action: keep
+        regex: kube-green-controller-manager-metrics-service
+      - source_labels: [__meta_kubernetes_endpoint_port_name]
+        action: keep
+        regex: metrics
+      metric_relabel_configs:
+      - source_labels: [__name__]
+        regex: 'kube_green_.*'
+        action: keep
+        
+    # Slack webhook service metrics
+    - job_name: 'slack-webhook-service'
+      kubernetes_sd_configs:
+      - role: endpoints
+        namespaces:
+          names:
+          - kube-green-system
+      relabel_configs:
+      - source_labels: [__meta_kubernetes_service_name]
+        action: keep
+        regex: slack-webhook-service
+      - source_labels: [__meta_kubernetes_endpoint_port_name]
+        action: keep
+        regex: metrics
+      metric_relabel_configs:
+      - source_labels: [__name__]
+        regex: 'slack_webhook_.*|http_.*|go_.*'
+        action: keep
+        
+    # Cost optimization specific metrics
+    - job_name: 'cost-optimization-exporter'
+      static_configs:
+      - targets: ['cost-optimization-exporter:8080']
+      scrape_interval: 5m
+      metrics_path: /metrics
+      honor_labels: true
+
+  # Prometheus configuration overrides
+  prometheus-config-overrides.yaml: |
+    global:
+      scrape_interval: 30s
+      evaluation_interval: 30s
+      external_labels:
+        cluster: 'k8s-resource-optimization'
+        environment: 'production'
+        
+    rule_files:
+    - '/etc/prometheus/rules/*.yaml'
+
+    scrape_configs:
+    # Override default kubernetes scraping for optimization focus
+    - job_name: 'kubernetes-pods'
+      kubernetes_sd_configs:
+      - role: pod
+      relabel_configs:
+      - source_labels: [__meta_kubernetes_pod_annotation_prometheus_io_scrape]
+        action: keep
+        regex: true
+      - source_labels: [__meta_kubernetes_pod_annotation_prometheus_io_path]
+        action: replace
+        target_label: __metrics_path__
+        regex: (.+)
+      - source_labels: [__address__, __meta_kubernetes_pod_annotation_prometheus_io_port]
+        action: replace
+        regex: ([^:]+)(?::\d+)?;(\d+)
+        replacement: $1:$2
+        target_label: __address__
+      - action: labelmap
+        regex: __meta_kubernetes_pod_label_(.+)
+      - source_labels: [__meta_kubernetes_namespace]
+        action: replace
+        target_label: namespace
+      - source_labels: [__meta_kubernetes_pod_name]
+        action: replace
+        target_label: pod
+      # Focus on optimization-related namespaces
+      - source_labels: [__meta_kubernetes_namespace]
+        action: keep
+        regex: '(kube-green-system|staging|development|production|monitoring)'
+        
+    # Remote write for long-term storage (optional)
+    remote_write:
+    - url: 'http://victoria-metrics:8428/api/v1/write'
+      queue_config:
+        max_samples_per_send: 10000
+        batch_send_deadline: 5s
+        max_shards: 200
+      metadata_config:
+        send: true
+        send_interval: 30s
+      write_relabel_configs:
+      - source_labels: [__name__]
+        regex: 'kube_green_.*|slack_webhook_.*|up|kube_deployment_.*|kube_pod_.*'
+        action: keep
+---
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: k8s-resource-optimization-rules
+  namespace: monitoring
+  labels:
+    app.kubernetes.io/name: prometheus
+    app.kubernetes.io/component: rules
+    app.kubernetes.io/part-of: k8s-resource-optimization
+    prometheus: kube-prometheus
+    role: alert-rules
+  annotations:
+    argocd.argoproj.io/sync-wave: "2"
+spec:
+  groups:
+    - name: k8s-resource-optimization.business
+      interval: 60s
+      rules:
+        # Business KPI metrics
+        - record: kube_green:monthly_savings_projection_dollars
+          expr: |
+            avg_over_time(kube_green:daily_savings_estimate_dollars[30d]) * 30
+          labels:
+            period: monthly
+
+        - record: kube_green:annual_savings_projection_dollars
+          expr: |
+            avg_over_time(kube_green:daily_savings_estimate_dollars[30d]) * 365
+          labels:
+            period: annual
+
+        - record: kube_green:efficiency_percentage
+          expr: |
+            (
+              avg_over_time(kube_green:environment_sleep_state[24h]) * 
+              avg_over_time(kube_green:sleep_operation_success_rate[24h]) / 100
+            )
+
+        - record: kube_green:developer_productivity_impact
+          expr: |
+            (
+              (
+                rate(slack_webhook_manual_overrides_total{type="emergency"}[24h]) +
+                rate(slack_webhook_manual_overrides_total{type="urgent"}[24h])
+              ) / 
+              rate(slack_webhook_manual_overrides_total[24h])
+            ) * 100
+
+    - name: k8s-resource-optimization.sla
+      interval: 30s
+      rules:
+        # SLA and performance metrics
+        - record: kube_green:system_availability_percentage
+          expr: |
+            (
+              avg(up{job="kube-green-operator"}) * 
+              avg(up{job="slack-webhook-service"})
+            ) * 100
+
+        - record: kube_green:operation_latency_p95_seconds
+          expr: |
+            histogram_quantile(0.95, 
+              rate(kube_green_operation_duration_seconds_bucket[5m])
+            )
+
+        - record: kube_green:manual_override_latency_p95_seconds
+          expr: |
+            histogram_quantile(0.95,
+              rate(slack_webhook_response_duration_seconds_bucket[5m])
+            )

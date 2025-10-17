@@ -1,0 +1,453 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: slack-manual-override-config
+  namespace: kube-green-system
+  labels:
+    app.kubernetes.io/name: slack-webhook
+    app.kubernetes.io/component: manual-override
+    app.kubernetes.io/part-of: k8s-resource-optimization
+  annotations:
+    argocd.argoproj.io/sync-wave: "1"
+data:
+  # Manual override configuration
+  override-config.yaml: |
+    manual_overrides:
+      # Emergency wake-up procedures
+      emergency_wake:
+        enabled: true
+        confirmation_required: true
+        timeout: "30s"
+        escalation_enabled: true
+        escalation_timeout: "5m"
+        
+        # Emergency contacts
+        escalation_contacts:
+          - name: "DevOps On-Call"
+            slack: "@devops-oncall"
+            email: "devops-oncall@company.com"
+          - name: "Platform Engineering"
+            slack: "@platform-eng"
+            email: "platform@company.com"
+        
+        # Emergency scenarios
+        scenarios:
+          - name: "critical_demo"
+            description: "Critical demo or presentation"
+            duration: "4h"
+            auto_sleep: true
+            environments: ["staging", "development"]
+            
+          - name: "production_incident"
+            description: "Production incident requiring staging resources"
+            duration: "2h"
+            auto_sleep: true
+            environments: ["staging"]
+            confirmation_double: true
+            
+          - name: "urgent_development"
+            description: "Urgent development work"
+            duration: "6h"
+            auto_sleep: true
+            environments: ["staging", "development"]
+      
+      # Scheduled override functionality
+      scheduled_overrides:
+        enabled: true
+        max_advance_days: 7
+        confirmation_required: false
+        
+        # Scheduled override types
+        types:
+          - name: "maintenance_window"
+            description: "Scheduled maintenance work"
+            max_duration: "8h"
+            environments: ["staging", "development"]
+            
+          - name: "demo_preparation"
+            description: "Demo preparation and testing"
+            max_duration: "4h"
+            environments: ["staging"]
+            
+          - name: "load_testing"
+            description: "Performance and load testing"
+            max_duration: "6h"
+            environments: ["staging"]
+            
+          - name: "security_testing"
+            description: "Security scanning and testing"
+            max_duration: "2h"
+            environments: ["staging", "development"]
+      
+      # Bulk operations
+      bulk_operations:
+        enabled: true
+        max_environments: 3
+        confirmation_required: true
+        
+        operations:
+          - name: "wake_all_dev"
+            description: "Wake all development environments"
+            environments: ["development", "staging"]
+            duration: "4h"
+            
+          - name: "sleep_all_dev"
+            description: "Sleep all development environments"
+            environments: ["development", "staging"]
+            immediate: true
+            
+          - name: "emergency_shutdown"
+            description: "Emergency shutdown all non-production"
+            environments: ["development", "staging"]
+            immediate: true
+            confirmation_double: true
+      
+      # Permission matrix
+      permissions:
+        developer:
+          allowed_operations: ["wake", "status"]
+          allowed_environments: ["development", "staging"]
+          confirmation_required: false
+          max_duration: "4h"
+          
+        devops:
+          allowed_operations: ["wake", "sleep", "status", "schedule"]
+          allowed_environments: ["development", "staging", "production"]
+          confirmation_required: true
+          max_duration: "8h"
+          
+        admin:
+          allowed_operations: ["*"]
+          allowed_environments: ["*"]
+          confirmation_required: true
+          max_duration: "24h"
+          emergency_override: true
+      
+      # Rate limiting and safety
+      safety:
+        rate_limit:
+          per_user: "10/hour"
+          global: "50/hour"
+          emergency: "5/hour"
+          
+        cooldown:
+          between_operations: "30s"
+          same_environment: "2m"
+          emergency_operations: "10m"
+          
+        validation:
+          check_environment_health: true
+          verify_user_permissions: true
+          log_all_operations: true
+          require_reason: true
+
+  # Slack interaction templates
+  slack-templates.yaml: |
+    interactive_components:
+      # Emergency wake buttons
+      emergency_wake_buttons:
+        - id: "emergency_wake_staging"
+          label: "🚨 Emergency Wake Staging"
+          style: "danger"
+          action: "emergency_wake"
+          environment: "staging"
+          confirmation:
+            title: "Emergency Wake Staging"
+            message: "This will immediately wake up staging environment. Continue?"
+            confirm_text: "Yes, Wake Up"
+            deny_text: "Cancel"
+            
+        - id: "emergency_wake_dev"
+          label: "🚨 Emergency Wake Dev"
+          style: "danger"
+          action: "emergency_wake"
+          environment: "development"
+          confirmation:
+            title: "Emergency Wake Development"
+            message: "This will immediately wake up development environment. Continue?"
+            confirm_text: "Yes, Wake Up"
+            deny_text: "Cancel"
+      
+      # Standard operation buttons
+      standard_buttons:
+        - id: "wake_staging"
+          label: "🟢 Wake Staging"
+          style: "primary"
+          action: "wake"
+          environment: "staging"
+          
+        - id: "sleep_staging"
+          label: "💤 Sleep Staging"
+          style: "default"
+          action: "sleep"
+          environment: "staging"
+          confirmation:
+            title: "Sleep Staging Environment"
+            message: "This will put staging environment to sleep. Are you sure?"
+            confirm_text: "Yes, Sleep"
+            deny_text: "Cancel"
+            
+        - id: "status_all"
+          label: "📊 Check Status"
+          style: "default"
+          action: "status"
+          environment: "all"
+      
+      # Scheduled operation buttons
+      scheduled_buttons:
+        - id: "schedule_wake"
+          label: "⏰ Schedule Wake"
+          style: "primary"
+          action: "schedule_wake"
+          modal: "schedule_wake_modal"
+          
+        - id: "schedule_sleep"
+          label: "⏰ Schedule Sleep"
+          style: "default"
+          action: "schedule_sleep"
+          modal: "schedule_sleep_modal"
+
+    # Modal definitions for complex operations
+    modals:
+      schedule_wake_modal:
+        type: "modal"
+        title:
+          type: "plain_text"
+          text: "Schedule Environment Wake"
+        submit:
+          type: "plain_text"
+          text: "Schedule"
+        close:
+          type: "plain_text"
+          text: "Cancel"
+        blocks:
+          - type: "section"
+            text:
+              type: "mrkdwn"
+              text: "*Schedule an environment to wake up at a specific time*"
+          
+          - type: "input"
+            element:
+              type: "static_select"
+              placeholder:
+                type: "plain_text"
+                text: "Select environment"
+              options:
+                - text:
+                    type: "plain_text"
+                    text: "Staging"
+                  value: "staging"
+                - text:
+                    type: "plain_text"
+                    text: "Development"
+                  value: "development"
+            label:
+              type: "plain_text"
+              text: "Environment"
+          
+          - type: "input"
+            element:
+              type: "datetimepicker"
+              initial_date_time: 1234567890
+            label:
+              type: "plain_text"
+              text: "Wake up time"
+          
+          - type: "input"
+            element:
+              type: "static_select"
+              placeholder:
+                type: "plain_text"
+                text: "Select duration"
+              options:
+                - text:
+                    type: "plain_text"
+                    text: "2 hours"
+                  value: "2h"
+                - text:
+                    type: "plain_text"
+                    text: "4 hours"
+                  value: "4h"
+                - text:
+                    type: "plain_text"
+                    text: "8 hours"
+                  value: "8h"
+                - text:
+                    type: "plain_text"
+                    text: "Until next scheduled sleep"
+                  value: "until_scheduled"
+            label:
+              type: "plain_text"
+              text: "Duration"
+          
+          - type: "input"
+            element:
+              type: "plain_text_input"
+              placeholder:
+                type: "plain_text"
+                text: "e.g., Demo preparation, urgent development, etc."
+            label:
+              type: "plain_text"
+              text: "Reason"
+
+  # Response templates
+  response-templates.yaml: |
+    success_responses:
+      wake_success:
+        color: "good"
+        title: "✅ Environment Wake Successful"
+        template: |
+          Environment `{{environment}}` is now waking up.
+          
+          **Details:**
+          • Triggered by: {{user}}
+          • Time: {{timestamp}}
+          • Expected completion: {{eta}}
+          • Reason: {{reason}}
+          
+          **Resources Starting:**
+          {{#resources}}
+          • {{type}}: {{name}} ({{replicas}} replicas)
+          {{/resources}}
+          
+          *Use `/k8s-status {{environment}}` to check progress*
+      
+      sleep_success:
+        color: "warning"
+        title: "💤 Environment Sleep Successful"
+        template: |
+          Environment `{{environment}}` is now going to sleep.
+          
+          **Details:**
+          • Triggered by: {{user}}
+          • Time: {{timestamp}}
+          • Estimated savings: {{cost_savings}}/hour
+          • Reason: {{reason}}
+          
+          **Resources Stopping:**
+          {{#resources}}
+          • {{type}}: {{name}} ({{replicas}} → 0 replicas)
+          {{/resources}}
+          
+          *Automatic wake-up scheduled for {{next_wake_time}}*
+      
+      emergency_response:
+        color: "danger"
+        title: "🚨 Emergency Override Executed"
+        template: |
+          **EMERGENCY OVERRIDE EXECUTED**
+          
+          Environment `{{environment}}` has been {{action}} via emergency procedure.
+          
+          **Emergency Details:**
+          • User: {{user}}
+          • Time: {{timestamp}}
+          • Scenario: {{scenario}}
+          • Duration: {{duration}}
+          • Auto-sleep: {{auto_sleep}}
+          
+          **Next Actions:**
+          {{#next_actions}}
+          • {{action}}
+          {{/next_actions}}
+          
+          **Escalation:** DevOps team has been notified.
+      
+    error_responses:
+      permission_denied:
+        color: "danger"
+        title: "🚫 Permission Denied"
+        template: |
+          You don't have permission to {{action}} environment `{{environment}}`.
+          
+          **Your permissions:**
+          • Environments: {{allowed_environments}}
+          • Operations: {{allowed_operations}}
+          
+          Contact your DevOps team if you need additional access.
+      
+      rate_limit_exceeded:
+        color: "warning"
+        title: "⏰ Rate Limit Exceeded"
+        template: |
+          You've exceeded the rate limit for manual overrides.
+          
+          **Current limits:**
+          • Operations per hour: {{limit_per_hour}}
+          • Cooldown between operations: {{cooldown}}
+          
+          Try again in {{retry_after}}.
+      
+      environment_unavailable:
+        color: "danger"
+        title: "❌ Environment Unavailable"
+        template: |
+          Environment `{{environment}}` is currently unavailable for {{action}}.
+          
+          **Reason:** {{reason}}
+          **Status:** {{status}}
+          **ETA:** {{eta}}
+          
+          *Use `/k8s-status {{environment}}` for more details*
+
+  # Audit and logging configuration
+  audit-config.yaml: |
+    audit_logging:
+      enabled: true
+      destination: "kubernetes_events"
+      retention_days: 90
+      
+      # Fields to log
+      logged_fields:
+        - user_id
+        - slack_user_name
+        - slack_team_id
+        - timestamp
+        - action
+        - environment
+        - reason
+        - duration
+        - confirmation_required
+        - emergency_override
+        - source_ip
+        - user_agent
+        
+      # Additional context
+      context_fields:
+        - environment_status_before
+        - environment_status_after
+        - resources_affected
+        - cost_impact
+        - approval_chain
+        
+    compliance:
+      # SOC2 compliance fields
+      soc2_required:
+        - user_authentication
+        - action_authorization
+        - data_integrity
+        - audit_trail
+        
+      # Change management integration
+      change_management:
+        enabled: true
+        create_ticket: true
+        ticket_system: "gitlab"
+        auto_approve_threshold: "2h"
+        
+    notifications:
+      # Notify on specific actions
+      notify_on:
+        - emergency_overrides
+        - production_changes
+        - bulk_operations
+        - permission_violations
+        
+      # Notification channels
+      channels:
+        - type: "slack"
+          channel: "#k8s-optimization-alerts"
+        - type: "webhook"
+          url: "https://monitoring.company.com/webhooks/k8s-overrides"
+        - type: "email"
+          recipients: ["devops@company.com", "security@company.com"]

@@ -1,0 +1,384 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: kube-green-advanced-scheduling
+  namespace: kube-green-system
+  labels:
+    app.kubernetes.io/name: kube-green
+    app.kubernetes.io/component: advanced-scheduling
+    app.kubernetes.io/part-of: k8s-resource-optimization
+  annotations:
+    argocd.argoproj.io/sync-wave: "2"
+data:
+  # Holiday and special event scheduling
+  holiday-schedules.yaml: |
+    holiday_schedules:
+      # US Holidays with extended shutdown periods
+      us_holidays:
+        - name: "New Year's Day"
+          start_date: "2025-12-31T18:00:00Z"
+          end_date: "2025-01-02T08:00:00Z"
+          environments: ["staging", "development"]
+          description: "Extended New Year shutdown"
+          
+        - name: "Memorial Day Weekend"
+          start_date: "2025-05-24T18:00:00Z"
+          end_date: "2025-05-27T08:00:00Z"
+          environments: ["staging", "development"]
+          description: "Memorial Day long weekend"
+          
+        - name: "Independence Day"
+          start_date: "2025-07-03T18:00:00Z"
+          end_date: "2025-07-07T08:00:00Z"
+          environments: ["staging", "development"]
+          description: "July 4th extended weekend"
+          
+        - name: "Labor Day Weekend"
+          start_date: "2025-08-30T18:00:00Z"
+          end_date: "2025-09-02T08:00:00Z"
+          environments: ["staging", "development"]
+          description: "Labor Day long weekend"
+          
+        - name: "Thanksgiving Week"
+          start_date: "2025-11-26T18:00:00Z"
+          end_date: "2025-11-30T08:00:00Z"
+          environments: ["staging", "development"]
+          description: "Thanksgiving week shutdown"
+          
+        - name: "Christmas/New Year Break"
+          start_date: "2025-12-23T18:00:00Z"
+          end_date: "2026-01-06T08:00:00Z"
+          environments: ["staging", "development"]
+          description: "Winter holiday break"
+          
+      # Company-specific holidays
+      company_events:
+        - name: "Company All-Hands"
+          start_date: "2025-03-15T08:00:00Z"
+          end_date: "2025-03-16T18:00:00Z"
+          environments: ["staging", "development"]
+          override_type: "keep_running"
+          description: "Keep environments running for demos"
+          
+          
+      # Regional holidays (for global teams)
+      regional_holidays:
+        - name: "Diwali"
+          start_date: "2025-10-31T18:00:00Z"
+          end_date: "2025-11-02T08:00:00Z"
+          environments: ["staging", "development"]
+          regions: ["india", "asia-pacific"]
+          
+        - name: "Chinese New Year"
+          start_date: "2025-01-28T18:00:00Z"
+          end_date: "2025-02-03T08:00:00Z"
+          environments: ["staging", "development"]
+          regions: ["china", "asia-pacific"]
+          
+
+  # Resource-aware optimization policies
+  resource-aware-policies.yaml: |
+    resource_optimization:
+      # CPU-based optimization
+      cpu_policies:
+        # Scale down when CPU usage is consistently low
+        low_utilization_threshold: 10  # percentage
+        observation_window: "30m"
+        action: "reduce_replicas"
+        min_replicas: 1
+        
+        # Scale up when approaching limits
+        high_utilization_threshold: 80  # percentage
+        scale_up_factor: 1.5
+        max_replicas: 10
+        
+        # Target CPU utilization for right-sizing
+        target_utilization: 60  # percentage
+        adjustment_factor: 0.1  # 10% adjustments
+        
+      # Memory-based optimization
+      memory_policies:
+        low_utilization_threshold: 20  # percentage
+        observation_window: "30m"
+        action: "reduce_memory_requests"
+        min_memory_mb: 128
+        
+        high_utilization_threshold: 85  # percentage
+        oom_protection_threshold: 90  # percentage
+        scale_up_memory_factor: 1.2
+        
+      # Storage optimization
+      storage_policies:
+        unused_pvc_age: "7d"
+        action: "mark_for_cleanup"
+        exclude_patterns:
+          - "*database*"
+          - "*persistent*"
+          - "*backup*"
+          
+        temp_storage_cleanup: true
+        temp_storage_age: "24h"
+        
+      # Network optimization
+      network_policies:
+        idle_connection_timeout: "15m"
+        connection_pool_optimization: true
+        dns_caching_enabled: true
+        
+    # Predictive scaling based on historical patterns
+    predictive_scaling:
+      enabled: true
+      learning_period: "30d"
+      prediction_window: "24h"
+      confidence_threshold: 0.8
+      
+      # Patterns to learn from
+      patterns:
+        - type: "daily_usage"
+          weight: 0.4
+          description: "Daily usage patterns"
+          
+        - type: "weekly_usage"
+          weight: 0.3
+          description: "Weekly patterns"
+          
+        - type: "deployment_frequency"
+          weight: 0.2
+          description: "Deployment and testing patterns"
+          
+        - type: "developer_activity"
+          weight: 0.1
+          description: "Git activity and CI/CD patterns"
+          
+      # Actions based on predictions
+      actions:
+        - condition: "predicted_usage < 20%"
+          action: "extend_sleep_period"
+          parameters:
+            extension_hours: 2
+            
+        - condition: "predicted_usage > 80%"
+          action: "preemptive_wake"
+          parameters:
+            advance_minutes: 30
+            
+        - condition: "deployment_predicted"
+          action: "keep_minimal_resources"
+          parameters:
+            min_replicas: 1
+            resource_buffer: 0.2
+
+  # Intelligent workload classification
+  workload-classification.yaml: |
+    workload_classification:
+      # Service tiers with different optimization strategies
+      service_tiers:
+        critical:
+          description: "Business-critical services"
+          optimization_level: "conservative"
+          min_availability: 99.9
+          sleep_restrictions:
+            - "no_sleep_business_hours"
+            - "manual_override_required"
+          labels:
+            - "tier=critical"
+            - "business-critical=true"
+          examples:
+            - "payment-service"
+            - "user-auth"
+            - "api-gateway"
+            
+        important:
+          description: "Important but not critical services"
+          optimization_level: "moderate"
+          min_availability: 99.0
+          sleep_restrictions:
+            - "sleep_allowed_off_hours"
+            - "auto_wake_on_demand"
+          labels:
+            - "tier=important"
+          examples:
+            - "user-dashboard"
+            - "notification-service"
+            - "reporting-api"
+            
+        standard:
+          description: "Standard development services"
+          optimization_level: "aggressive"
+          min_availability: 95.0
+          sleep_restrictions: []
+          labels:
+            - "tier=standard"
+          examples:
+            - "feature-branches"
+            - "test-services"
+            - "development-tools"
+            
+        experimental:
+          description: "Experimental and testing services"
+          optimization_level: "maximum"
+          min_availability: 90.0
+          sleep_restrictions: []
+          auto_cleanup: true
+          max_idle_time: "72h"
+          labels:
+            - "tier=experimental"
+            - "auto-cleanup=true"
+          examples:
+            - "poc-services"
+            - "load-test-harness"
+            - "temp-demos"
+      
+      # Dependency mapping for intelligent wake-up
+      dependency_chains:
+        web_stack:
+          primary: "frontend"
+          dependencies:
+            - "backend-api"
+            - "database"
+            - "redis-cache"
+          wake_order: ["database", "redis-cache", "backend-api", "frontend"]
+          sleep_order: ["frontend", "backend-api", "redis-cache", "database"]
+          
+        data_pipeline:
+          primary: "data-processor"
+          dependencies:
+            - "message-queue"
+            - "data-store"
+            - "analytics-db"
+          wake_order: ["data-store", "analytics-db", "message-queue", "data-processor"]
+          sleep_order: ["data-processor", "message-queue", "analytics-db", "data-store"]
+          
+        microservices_suite:
+          primary: "orchestrator"
+          dependencies:
+            - "user-service"
+            - "product-service"
+            - "order-service"
+            - "shared-database"
+          wake_order: ["shared-database", "user-service", "product-service", "order-service", "orchestrator"]
+          sleep_order: ["orchestrator", "order-service", "product-service", "user-service", "shared-database"]
+          
+      # Auto-discovery of workload patterns
+      auto_discovery:
+        enabled: true
+        analysis_period: "7d"
+        update_frequency: "daily"
+        
+        # Metrics to analyze for classification
+        classification_metrics:
+          - "cpu_usage_patterns"
+          - "memory_usage_patterns"
+          - "request_rate_patterns"
+          - "error_rate_patterns"
+          - "dependency_analysis"
+          
+        # Automatic tier assignment based on usage
+        auto_tier_assignment:
+          critical_criteria:
+            - "error_rate < 0.1%"
+            - "uptime_requirement > 99.9%"
+            - "request_rate > 1000/min"
+            
+          important_criteria:
+            - "error_rate < 1%"
+            - "uptime_requirement > 99%"
+            - "request_rate > 100/min"
+            
+          standard_criteria:
+            - "regular_usage_pattern"
+            - "development_environment"
+            
+          experimental_criteria:
+            - "irregular_usage"
+            - "low_request_rate"
+            - "test_environment"
+
+  # Advanced scheduling algorithms
+  scheduling-algorithms.yaml: |
+    scheduling_algorithms:
+      # Machine learning-based scheduling
+      ml_scheduler:
+        enabled: true
+        model_type: "time_series_forecasting"
+        training_data_period: "90d"
+        prediction_accuracy_threshold: 0.85
+        
+        features:
+          - "historical_usage"
+          - "day_of_week"
+          - "time_of_day"
+          - "deployment_frequency"
+          - "git_activity"
+          - "calendar_events"
+          - "weather_data"  # For energy optimization
+          
+        models:
+          - name: "usage_predictor"
+            type: "lstm"
+            parameters:
+              sequence_length: 24  # hours
+              hidden_units: 50
+              dropout_rate: 0.2
+              
+          - name: "anomaly_detector"
+            type: "isolation_forest"
+            parameters:
+              contamination: 0.1
+              n_estimators: 100
+              
+      # Genetic algorithm for optimal scheduling
+      genetic_optimizer:
+        enabled: false  # Experimental feature
+        population_size: 50
+        generations: 100
+        mutation_rate: 0.1
+        crossover_rate: 0.8
+        
+        fitness_function:
+          cost_weight: 0.4
+          availability_weight: 0.3
+          performance_weight: 0.2
+          user_satisfaction_weight: 0.1
+          
+      # Rule-based intelligent scheduling
+      rule_engine:
+        enabled: true
+        rules:
+          # Weather-based optimization (for renewable energy)
+          - name: "renewable_energy_optimization"
+            condition: "renewable_energy_forecast > 80%"
+            action: "prefer_high_compute_periods"
+            weight: 0.1
+            
+          # Cost-based optimization
+          - name: "spot_instance_optimization"
+            condition: "spot_instance_availability > 90%"
+            action: "delay_sleep_for_cost_savings"
+            weight: 0.2
+            
+          # Team timezone optimization
+          - name: "global_team_coordination"
+            condition: "active_developers_in_timezone > 0"
+            action: "keep_minimal_services_running"
+            weight: 0.3
+            
+          # Emergency override patterns
+          - name: "emergency_pattern_detection"
+            condition: "manual_overrides_last_hour > 3"
+            action: "disable_auto_sleep_temporarily"
+            duration: "2h"
+            weight: 0.4
+            
+      # Consensus-based scheduling (for multi-region)
+      consensus_scheduler:
+        enabled: false  # For multi-cluster deployments
+        algorithm: "raft"
+        min_consensus_nodes: 3
+        election_timeout: "5s"
+        heartbeat_interval: "1s"
+        
+        coordination:
+          cross_region_sync: true
+          global_schedule_coordination: true
+          failover_region_priority: ["us-west", "us-east", "eu-west"]

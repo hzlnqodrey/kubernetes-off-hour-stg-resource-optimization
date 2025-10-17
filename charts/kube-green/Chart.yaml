@@ -1,0 +1,61 @@
+apiVersion: v2
+name: kube-green
+description: A Helm chart for kube-green - Kubernetes operator to reduce CO2 footprint of your clusters
+type: application
+version: 0.5.3
+appVersion: "v0.5.1"
+
+home: https://kube-green.dev
+icon: https://kube-green.dev/img/logo.svg
+sources:
+  - https://github.com/kube-green/kube-green
+  - https://github.com/kube-green/kube-green/tree/main/charts/kube-green
+
+keywords:
+  - kubernetes
+  - green-software
+  - sustainability
+  - cost-optimization
+  - resource-management
+  - operator
+  - crd
+
+maintainers:
+  - name: kube-green team
+    email: info@kube-green.dev
+    url: https://kube-green.dev
+
+annotations:
+  category: Infrastructure
+  licenses: MIT
+
+  # Artifact Hub annotations
+  artifacthub.io/changes: |
+    - Added support for multiple sleep schedules
+    - Enhanced resource exclusion capabilities
+    - Improved webhook notifications
+    - Added metrics and monitoring
+  artifacthub.io/containsSecurityUpdates: "false"
+  artifacthub.io/images: |
+    - name: kube-green
+      image: kubegreen/kube-green:v0.5.1
+  artifacthub.io/license: MIT
+  artifacthub.io/links: |
+    - name: Documentation
+      url: https://kube-green.dev/docs/
+    - name: GitHub
+      url: https://github.com/kube-green/kube-green
+  artifacthub.io/maintainers: |
+    - name: kube-green team
+      email: info@kube-green.dev
+  artifacthub.io/operator: "true"
+  artifacthub.io/operatorCapabilities: Deep Insights
+  artifacthub.io/prerelease: "false"
+  artifacthub.io/recommendations: |
+    - url: https://artifacthub.io/packages/helm/prometheus-community/prometheus
+    - url: https://artifacthub.io/packages/helm/grafana/grafana
+
+dependencies: []
+
+engine: gotpl
+kubeVersion: ">= 1.19.0"

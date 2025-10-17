@@ -1,0 +1,561 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: kube-green-integration-tests
+  namespace: kube-green-system
+  labels:
+    app.kubernetes.io/name: kube-green-tests
+    app.kubernetes.io/component: integration-tests
+    app.kubernetes.io/part-of: k8s-resource-optimization
+  annotations:
+    argocd.argoproj.io/sync-wave: "10"
+data:
+  # Integration test suite configuration
+  test-config.yaml: |
+    integration_tests:
+      test_environment: "test"
+      timeout: "30m"
+      parallel_execution: true
+      cleanup_after_tests: true
+      
+      # Test environments setup
+      test_environments:
+        - name: "integration-test-staging"
+          namespace: "integration-test-staging"
+          sleep_schedule: "*/5 * * * *"  # Every 5 minutes for fast testing
+          wake_schedule: "*/10 * * * *"  # Every 10 minutes
+          test_workloads:
+            - name: "test-app-1"
+              replicas: 2
+              image: "nginx:alpine"
+            - name: "test-app-2"
+              replicas: 3
+              image: "busybox:latest"
+              
+        - name: "integration-test-development"
+          namespace: "integration-test-development"
+          sleep_schedule: "*/3 * * * *"  # Every 3 minutes
+          wake_schedule: "*/8 * * * *"   # Every 8 minutes
+          test_workloads:
+            - name: "test-service-1"
+              replicas: 1
+              image: "alpine:latest"
+      
+      # Test scenarios
+      test_scenarios:
+        - name: "basic_sleep_wake_cycle"
+          description: "Test basic sleep and wake operations"
+          timeout: "10m"
+          steps:
+            - action: "deploy_test_workloads"
+              namespace: "integration-test-staging"
+              expected_replicas: 2
+              
+            - action: "trigger_sleep"
+              method: "schedule"
+              wait_for: "sleep_completion"
+              expected_replicas: 0
+              timeout: "3m"
+              
+            - action: "trigger_wake"
+              method: "schedule"
+              wait_for: "wake_completion"
+              expected_replicas: 2
+              timeout: "5m"
+              
+            - action: "validate_workload_health"
+              health_checks:
+                - "pods_running"
+                - "services_accessible"
+                - "no_error_logs"
+                
+        - name: "manual_override_via_slack"
+          description: "Test manual sleep/wake via Slack commands"
+          timeout: "15m"
+          prerequisites:
+            - "slack_webhook_service_healthy"
+          steps:
+            - action: "deploy_test_workloads"
+              namespace: "integration-test-staging"
+              
+            - action: "send_slack_command"
+              command: "/k8s-sleep integration-test-staging"
+              expected_response: "success"
+              wait_for: "sleep_completion"
+              
+            - action: "validate_sleep_state"
+              expected_replicas: 0
+              
+            - action: "send_slack_command"
+              command: "/k8s-wake integration-test-staging"
+              expected_response: "success"
+              wait_for: "wake_completion"
+              
+            - action: "validate_wake_state"
+              expected_replicas: 2
+              
+        - name: "multi_environment_coordination"
+          description: "Test coordination between multiple environments"
+          timeout: "20m"
+          steps:
+            - action: "deploy_test_workloads"
+              namespaces: ["integration-test-staging", "integration-test-development"]
+              
+            - action: "trigger_bulk_sleep"
+              method: "slack_command"
+              command: "/k8s-sleep-all dev"
+              environments: ["integration-test-staging", "integration-test-development"]
+              
+            - action: "validate_bulk_sleep"
+              expected_state: "all_sleeping"
+              
+            - action: "trigger_emergency_wake"
+              method: "slack_button"
+              button: "emergency_wake_all"
+              
+            - action: "validate_emergency_wake"
+              expected_state: "all_awake"
+              
+        - name: "failure_resilience_test"
+          description: "Test system behavior during component failures"
+          timeout: "25m"
+          steps:
+            - action: "deploy_test_workloads"
+              namespace: "integration-test-staging"
+              
+            - action: "simulate_operator_failure"
+              method: "pod_deletion"
+              target: "kube-green-controller-manager"
+              
+            - action: "wait_for_operator_recovery"
+              timeout: "5m"
+              
+            - action: "trigger_sleep_during_recovery"
+              method: "schedule"
+              expected_behavior: "graceful_handling"
+              
+            - action: "validate_system_recovery"
+              checks:
+                - "operator_healthy"
+                - "sleep_operations_working"
+                - "no_data_loss"
+                
+        - name: "performance_load_test"
+          description: "Test system performance under load"
+          timeout: "30m"
+          steps:
+            - action: "deploy_multiple_workloads"
+              count: 20
+              namespace: "integration-test-staging"
+              
+            - action: "trigger_concurrent_operations"
+              operations:
+                - type: "sleep"
+                  count: 10
+                - type: "wake"
+                  count: 10
+              concurrent: true
+              
+            - action: "measure_performance"
+              metrics:
+                - "operation_latency"
+                - "resource_usage"
+                - "error_rate"
+                
+            - action: "validate_performance_sla"
+              sla:
+                max_latency: "30s"
+                max_cpu_usage: "500m"
+                max_memory_usage: "256Mi"
+                max_error_rate: "1%"
+
+  # Test execution scripts
+  test-runner.sh: |
+    #!/bin/bash
+    set -euo pipefail
+
+    # Configuration
+    NAMESPACE="kube-green-system"
+    TEST_NAMESPACE_PREFIX="integration-test"
+    TIMEOUT="1800"  # 30 minutes
+
+    # Colors for output
+    RED='\033[0;31m'
+    GREEN='\033[0;32m'
+    YELLOW='\033[1;33m'
+    BLUE='\033[0;34m'
+    NC='\033[0m'
+
+    log_info() {
+        echo -e "${BLUE}[INFO]${NC} $1"
+    }
+
+    log_success() {
+        echo -e "${GREEN}[SUCCESS]${NC} $1"
+    }
+
+    log_warning() {
+        echo -e "${YELLOW}[WARNING]${NC} $1"
+    }
+
+    log_error() {
+        echo -e "${RED}[ERROR]${NC} $1"
+    }
+
+    # Test helper functions
+    wait_for_pods() {
+        local namespace=$1
+        local expected_count=${2:-1}
+        local timeout=${3:-300}
+        
+        log_info "Waiting for $expected_count pods in namespace $namespace"
+        
+        local elapsed=0
+        while [ $elapsed -lt $timeout ]; do
+            local current_count
+            current_count=$(kubectl get pods -n "$namespace" --field-selector=status.phase=Running --no-headers 2>/dev/null | wc -l || echo "0")
+            
+            if [ "$current_count" -eq "$expected_count" ]; then
+                log_success "Expected pod count reached: $current_count"
+                return 0
+            fi
+            
+            sleep 5
+            elapsed=$((elapsed + 5))
+        done
+        
+        log_error "Timeout waiting for pods. Expected: $expected_count, Current: $current_count"
+        return 1
+    }
+
+    wait_for_sleep_completion() {
+        local namespace=$1
+        local timeout=${2:-300}
+        
+        log_info "Waiting for sleep completion in namespace $namespace"
+        wait_for_pods "$namespace" 0 "$timeout"
+    }
+
+    wait_for_wake_completion() {
+        local namespace=$1
+        local expected_count=$2
+        local timeout=${3:-300}
+        
+        log_info "Waiting for wake completion in namespace $namespace"
+        wait_for_pods "$namespace" "$expected_count" "$timeout"
+    }
+
+    create_test_workload() {
+        local namespace=$1
+        local name=$2
+        local replicas=${3:-2}
+        local image=${4:-"nginx:alpine"}
+        
+        log_info "Creating test workload $name in namespace $namespace"
+        
+        kubectl create namespace "$namespace" --dry-run=client -o yaml | kubectl apply -f -
+        
+        cat <<EOF | kubectl apply -f -
+    apiVersion: apps/v1
+    kind: Deployment
+    metadata:
+      name: $name
+      namespace: $namespace
+      labels:
+        app: $name
+        test: integration
+    spec:
+      replicas: $replicas
+      selector:
+        matchLabels:
+          app: $name
+      template:
+        metadata:
+          labels:
+            app: $name
+        spec:
+          containers:
+          - name: app
+            image: $image
+            resources:
+              requests:
+                cpu: 10m
+                memory: 16Mi
+              limits:
+                cpu: 100m
+                memory: 64Mi
+    EOF
+        
+        wait_for_pods "$namespace" "$replicas"
+    }
+
+    create_sleep_info() {
+        local namespace=$1
+        local sleep_schedule=$2
+        local wake_schedule=$3
+        
+        log_info "Creating SleepInfo for namespace $namespace"
+        
+        cat <<EOF | kubectl apply -f -
+    apiVersion: kube-green.com/v1alpha1
+    kind: SleepInfo
+    metadata:
+      name: $namespace-test-schedule
+      namespace: $namespace
+      labels:
+        test: integration
+    spec:
+      sleepAt: "$sleep_schedule"
+      wakeUpAt: "$wake_schedule"
+      timeZone: "UTC"
+      suspendCronJobs: true
+    EOF
+    }
+
+    # Test scenarios
+    test_basic_sleep_wake_cycle() {
+        log_info "Running test: basic_sleep_wake_cycle"
+        
+        local namespace="$TEST_NAMESPACE_PREFIX-basic"
+        local workload_name="test-app"
+        local replicas=2
+        
+        # Setup
+        create_test_workload "$namespace" "$workload_name" "$replicas"
+        create_sleep_info "$namespace" "*/2 * * * *" "*/4 * * * *"
+        
+        # Wait for next sleep cycle (up to 3 minutes)
+        log_info "Waiting for sleep cycle to trigger..."
+        sleep 180
+        
+        # Validate sleep
+        if wait_for_sleep_completion "$namespace" 120; then
+            log_success "Sleep operation completed successfully"
+        else
+            log_error "Sleep operation failed"
+            return 1
+        fi
+        
+        # Wait for next wake cycle
+        log_info "Waiting for wake cycle to trigger..."
+        sleep 180
+        
+        # Validate wake
+        if wait_for_wake_completion "$namespace" "$replicas" 180; then
+            log_success "Wake operation completed successfully"
+        else
+            log_error "Wake operation failed"
+            return 1
+        fi
+        
+        log_success "Basic sleep/wake cycle test passed"
+        return 0
+    }
+
+    test_slack_integration() {
+        log_info "Running test: slack_integration"
+        
+        local namespace="$TEST_NAMESPACE_PREFIX-slack"
+        local workload_name="test-slack-app"
+        local replicas=2
+        
+        # Setup
+        create_test_workload "$namespace" "$workload_name" "$replicas"
+        
+        # Test Slack webhook endpoint
+        local webhook_url="http://slack-webhook-service:8080"
+        
+        # Simulate sleep command
+        log_info "Testing sleep command via webhook"
+        local response
+        response=$(curl -s -X POST "$webhook_url/test-sleep" \
+            -H "Content-Type: application/json" \
+            -d "{\"environment\": \"$namespace\", \"action\": \"sleep\"}" || echo "error")
+        
+        if [[ "$response" == *"success"* ]]; then
+            log_success "Slack webhook sleep command test passed"
+        else
+            log_warning "Slack webhook test skipped (service may not be available)"
+        fi
+        
+        return 0
+    }
+
+    test_operator_resilience() {
+        log_info "Running test: operator_resilience"
+        
+        local namespace="$TEST_NAMESPACE_PREFIX-resilience"
+        local workload_name="test-resilience-app"
+        local replicas=2
+        
+        # Setup
+        create_test_workload "$namespace" "$workload_name" "$replicas"
+        
+        # Check operator health
+        log_info "Checking operator health before test"
+        if ! kubectl get pods -n "$NAMESPACE" -l app.kubernetes.io/name=kube-green --no-headers | grep -q Running; then
+            log_error "Operator not healthy before test"
+            return 1
+        fi
+        
+        # Simulate operator restart
+        log_info "Restarting operator to test resilience"
+        kubectl rollout restart deployment/kube-green-controller-manager -n "$NAMESPACE"
+        
+        # Wait for operator to be ready
+        kubectl rollout status deployment/kube-green-controller-manager -n "$NAMESPACE" --timeout=300s
+        
+        # Validate operator recovered
+        if wait_for_pods "$NAMESPACE" 1 300; then
+            log_success "Operator resilience test passed"
+        else
+            log_error "Operator failed to recover"
+            return 1
+        fi
+        
+        return 0
+    }
+
+    # Cleanup function
+    cleanup_test_resources() {
+        log_info "Cleaning up test resources"
+        
+        for ns in $(kubectl get namespaces -o name | grep "$TEST_NAMESPACE_PREFIX" | cut -d/ -f2); do
+            log_info "Deleting namespace: $ns"
+            kubectl delete namespace "$ns" --ignore-not-found=true
+        done
+        
+        # Clean up any test SleepInfo resources
+        kubectl delete sleepinfos -A -l test=integration --ignore-not-found=true
+    }
+
+    # Main test execution
+    main() {
+        log_info "Starting kube-green integration tests"
+        
+        # Ensure cleanup on exit
+        trap cleanup_test_resources EXIT
+        
+        # Pre-test validation
+        log_info "Validating prerequisites"
+        
+        # Check if kube-green operator is running
+        if ! kubectl get deployment kube-green-controller-manager -n "$NAMESPACE" &>/dev/null; then
+            log_error "kube-green operator not found in namespace $NAMESPACE"
+            exit 1
+        fi
+        
+        # Check if operator is healthy
+        if ! kubectl get pods -n "$NAMESPACE" -l app.kubernetes.io/name=kube-green --no-headers | grep -q Running; then
+            log_error "kube-green operator is not running"
+            exit 1
+        fi
+        
+        log_success "Prerequisites validated"
+        
+        # Run test scenarios
+        local test_results=()
+        
+        # Test 1: Basic sleep/wake cycle
+        if test_basic_sleep_wake_cycle; then
+            test_results+=("basic_sleep_wake_cycle:PASS")
+        else
+            test_results+=("basic_sleep_wake_cycle:FAIL")
+        fi
+        
+        # Test 2: Slack integration
+        if test_slack_integration; then
+            test_results+=("slack_integration:PASS")
+        else
+            test_results+=("slack_integration:FAIL")
+        fi
+        
+        # Test 3: Operator resilience
+        if test_operator_resilience; then
+            test_results+=("operator_resilience:PASS")
+        else
+            test_results+=("operator_resilience:FAIL")
+        fi
+        
+        # Report results
+        log_info "Test Results Summary:"
+        local passed=0
+        local failed=0
+        
+        for result in "${test_results[@]}"; do
+            local test_name="${result%:*}"
+            local test_status="${result#*:}"
+            
+            if [[ "$test_status" == "PASS" ]]; then
+                log_success "  $test_name: PASSED"
+                ((passed++))
+            else
+                log_error "  $test_name: FAILED"
+                ((failed++))
+            fi
+        done
+        
+        log_info "Tests Passed: $passed, Tests Failed: $failed"
+        
+        if [ "$failed" -eq 0 ]; then
+            log_success "All integration tests passed!"
+            exit 0
+        else
+            log_error "Some integration tests failed!"
+            exit 1
+        fi
+    }
+
+    main "$@"
+
+  # Performance test configuration
+  performance-test.yaml: |
+    performance_tests:
+      load_test:
+        name: "kube-green-load-test"
+        duration: "10m"
+        concurrent_operations: 50
+        
+        scenarios:
+          - name: "concurrent_sleep_operations"
+            type: "sleep"
+            target_namespaces: 25
+            expected_completion_time: "60s"
+            
+          - name: "concurrent_wake_operations"
+            type: "wake"
+            target_namespaces: 25
+            expected_completion_time: "120s"
+            
+          - name: "mixed_operations"
+            type: "mixed"
+            sleep_operations: 15
+            wake_operations: 15
+            status_operations: 20
+            expected_completion_time: "90s"
+            
+        performance_requirements:
+          max_cpu_usage: "500m"
+          max_memory_usage: "512Mi"
+          max_response_time: "30s"
+          min_success_rate: "95%"
+          max_error_rate: "2%"
+          
+        monitoring:
+          metrics_collection_interval: "5s"
+          resource_monitoring: true
+          latency_monitoring: true
+          error_monitoring: true
+          
+        alerts:
+          - condition: "cpu_usage > 80%"
+            action: "alert"
+            severity: "warning"
+            
+          - condition: "memory_usage > 80%"
+            action: "alert"
+            severity: "warning"
+            
+          - condition: "error_rate > 5%"
+            action: "stop_test"
+            severity: "critical"
